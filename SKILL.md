@@ -1,6 +1,6 @@
 ---
 name: hwpx
-description: "HWPX 문서(.hwpx) 생성·읽기·편집 통합 스킬. '한글 문서', 'hwpx', 'HWPX', '한글파일', '.hwpx 만들어줘', '보고서', '공문', '기안문', '한글로 작성', '회의록', '제안서', '이미지 포함 문서' 등의 키워드 시 반드시 사용. 마크다운·텍스트·URL 자료를 HWPX 문서로 변환하는 '콘텐츠→문서화' 워크플로우와 템플릿 치환 워크플로우를 지원한다."
+description: "HWPX 문서 생성·읽기·편집. 한글 파일 통합 스킬."
 allowed-tools: Bash(python3 *), Read, Write, Glob, Grep
 ---
 
