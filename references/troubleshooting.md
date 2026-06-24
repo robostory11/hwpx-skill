@@ -1,5 +1,18 @@
 # HWPX 트러블슈팅
 
+## "문서가 손상되었거나 변조되었을 가능성" 보안 경고 (열기 거부)
+
+> 한글 GUI에서 "[문서 보안 설정]을 [낮음]으로 설정해야 합니다" 메시지와 함께 열리지 않는 증상.
+> 2026-06-11 실사례 + 한컴 개발자 포럼 공식 답변(forum.developer.hancom.com/t/hwpx-section0-xml/2414)으로 확인.
+
+| 원인 | 해결 |
+|------|------|
+| 한글이 저장한 hwpx의 section0.xml 텍스트를 외부에서 수정 → 각 문단의 `<hp:linesegarray>`(줄 레이아웃 캐시)와 실제 텍스트가 불일치 → 한글이 변조로 판정 | **수정한 section0.xml에서 `<hp:linesegarray>...</hp:linesegarray>`를 전부 제거** (optional 요소라 제거 시 한글이 재계산). `re.sub(r'<hp:linesegarray>.*?</hp:linesegarray>', '', xml, flags=re.S)` |
+
+- ZIP 재포장 방식·메타데이터 문제가 아님 (local header까지 동일해도 발생)
+- clone_form.py / ZIP-level 치환으로 텍스트를 바꾼 모든 경우에 적용 - **한글 저장본을 치환 편집했으면 linesegarray 제거를 표준 후처리로 실행할 것**
+- 검증 시 verify_hwpx.py의 section 크기 비율이 줄어드는 것은 linesegarray 제거 때문이므로 정상
+
 ## "한글에서 빈 페이지로 열림"
 
 | 원인 | 해결 |
