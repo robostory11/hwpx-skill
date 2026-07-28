@@ -6,12 +6,13 @@
   눈으로는 못 찾는 것이 많다 — 도장이 빠졌다거나, 스무 개 조 중 여덟 개만 굵기가
   다르다거나(2026-07-28 TattooDA 계약서에서 실제로 있었던 일).
 
-  hwpx는 사실 압축 파일이라 안을 열어볼 수 있다. 이 도구가 다섯 층을 한 번에 견준다.
-    1) 글자          — 내용이 바뀌었나 (표 안 글자까지)
-    2) 들어 있는 것   — 그림·도장 같은 것이 빠지거나 들어왔나
-    3) 글자 모양 정의 — 글자 크기·굵기·색이 바뀌었나
-    4) 문단 모양 정의 — 정렬·줄간격·여백이 바뀌었나
-    5) 문단별 서식    — 글자는 같은데 모양만 다른 곳이 어디인가
+  hwpx는 사실 압축 파일이라 안을 열어볼 수 있다. 이 도구가 여섯 층을 한 번에 견준다.
+    1)   글자          — 내용이 바뀌었나 (표 안 글자까지 · 형광펜이 껴도)
+    2)   들어 있는 것   — 그림·도장이 빠졌나 · 알맹이가 바뀌었나 · 쪽 설정이 바뀌었나
+    3)   글자 모양 정의 — 크기·굵기·밑줄·색·자간… 속성 전체
+    4)   문단 모양 정의 — 정렬·줄간격·문단여백… 속성 전체
+    4-2) 머리 정보     — 글꼴·음영·스타일. 3·4층이 번호로만 가리키는 실체
+    5)   문단별 서식    — 모양이 다른 곳이 어디인가
 
   ★ XML을 정규식으로 훑지 않고 파서로 읽는다. 정규식으로 하면 표 안에 문단이 중첩될 때
     바깥 문단이 잘려 글자를 통째로 놓친다(실측: 82개 문단 중 77개만 잡힘). 놓친 채
@@ -57,7 +58,17 @@ def 지문(e):
       지나간다. 속성과 자식을 통째로 담아 "설명은 못 해도 달라졌다는 사실은 놓치지 않는다".
     """
     return (e.tag.split('}')[-1], tuple(sorted(e.attrib.items())),
+            (e.text or '').strip(),
             tuple(지문(c) for c in e))
+
+
+def 번호순(x):
+    """모양 번호가 늘 숫자라는 보장이 없다. 숫자가 아니면 뒤로 보내고 죽지 않는다.
+    여기서 터지면 종료코드 1이 되어 '차이 있음'과 구별되지 않는다."""
+    try:
+        return (0, int(x))
+    except (TypeError, ValueError):
+        return (1, str(x))
 
 
 def 문단들(z):
@@ -76,10 +87,17 @@ def 문단들(z):
         for p in 뿌리.iter(HP + 'p'):
             런 = []
             for r in p.findall(HP + 'run'):
-                모양 = r.get('charPrIDRef')
-                글 = ''.join(t.text or '' for t in r.findall(HP + 't'))
-                if 모양 is not None and 글:
-                    런.append((모양, 글))
+                #    ★ t.text는 첫 자식 요소 앞까지만이다. <hp:t> 안에는 형광펜
+                #      <hp:markpenBegin/>, 묶음 빈칸 <hp:nbSpace/> 같은 것이 끼고,
+                #      그 뒤 글자는 자식의 tail에 들어가 버려진다. 실측: 형광펜이 낀
+                #      문단에서 "계약금은 "까지만 읽혀 "30일→90일" 변경을 놓쳤다.
+                #      itertext()로 자식 사이 글자까지 모은다.
+                글 = ''.join(''.join(t.itertext()) for t in r.findall(HP + 't'))
+                if not 글:
+                    continue
+                #    번호가 없는 run도 글자는 반드시 센다. 안 그러면 그 문단이
+                #    통째로 사라져 새 문단이 들어와도 "차이 없음"이 된다.
+                런.append((r.get('charPrIDRef') or '?', 글))
             나온것.append((''.join(g for _, g in 런).strip(),
                          [c for c, _ in 런],
                          p.get('paraPrIDRef')))
@@ -207,6 +225,12 @@ def main():
     if len(인자) != 2:
         print(__doc__)
         sys.exit(2)
+    #    모르는 옵션을 조용히 흘리면 "--글자만"처럼 잘못 쳤을 때 그대로 다 돌린다.
+    모르는옵션 = 옵션 - {'--글자', '--조용히'}
+    if 모르는옵션:
+        print(f'✗ 모르는 옵션입니다: {" ".join(sorted(모르는옵션))}')
+        print('  쓸 수 있는 것: --글자  --조용히')
+        sys.exit(2)
 
     가경로, 나경로 = Path(인자[0]), Path(인자[1])
     가, 나 = 열기(가경로), 열기(나경로)
@@ -259,31 +283,50 @@ def main():
         빠진것, 들어온것 = sorted(가목록 - 나목록), sorted(나목록 - 가목록)
         #    이름이 같아도 알맹이가 바뀔 수 있다 — 도장을 다른 도장으로 갈아끼운 경우.
         #    zip이 이미 갖고 있는 CRC로 견주므로 값이 들지 않는다.
-        #    Contents/*.xml은 한글이 다시 저장할 때마다 달라지므로 여기서 보지 않는다
-        #    (그쪽 변화는 1·3·4·5층이 뜻으로 견준다).
-        내용바뀜 = [n for n in sorted(가목록 & 나목록)
-                 if n.startswith('BinData/') and 가.getinfo(n).CRC != 나.getinfo(n).CRC]
-        if not 빠진것 and not 들어온것 and not 내용바뀜:
-            적기('    ○ 같음')
-        else:
-            차이있음 = True
-            for n in 빠진것:
-                적기(f'    ✗ 비교본에서 빠짐: {n} ({가.getinfo(n).file_size:,}바이트)')
-            for n in 들어온것:
-                적기(f'    ✗ 비교본에 새로 들어옴: {n} ({나.getinfo(n).file_size:,}바이트)')
-            for n in 내용바뀜:
-                적기(f'    ✗ 이름은 같은데 알맹이가 바뀜: {n} '
-                    f'({가.getinfo(n).file_size:,} → {나.getinfo(n).file_size:,}바이트)')
+        #    Contents/section*.xml·header.xml은 한글이 다시 저장할 때마다 달라지므로
+        #    여기서 보지 않는다(그쪽 변화는 1·3·4·5층이 뜻으로 견준다).
+        #    다만 content.hpf는 그 범주가 아니다 — 그림 등록 정보가 여기 있어서,
+        #    참조만 되살려도 쓰이지 않는 이미지가 문서에 딸려 나간다.
+        def 봐야하나(n):
+            return n.startswith('BinData/') or n.endswith('content.hpf')
 
+        내용바뀜 = [n for n in sorted(가목록 & 나목록)
+                 if 봐야하나(n) and 가.getinfo(n).CRC != 나.getinfo(n).CRC]
         def 개체수(z, 태그):
             return sum(len(list(ET.fromstring(z.read(n)).iter(HP + 태그)))
                        for n in 구역파일(z))
 
+        #    쪽 설정 — 용지 크기·방향·쪽 여백. 여백이 바뀌면 쪽수가 바뀌고
+        #    쪽수가 바뀌면 서명 위치가 바뀐다. 4층의 '여백'은 문단 여백이라 다른 것이다.
+        def 쪽설정(z):
+            나온것 = []
+            for n in 구역파일(z):
+                for sec in ET.fromstring(z.read(n)).iter(HP + 'secPr'):
+                    for pp in sec.iter(HP + 'pagePr'):
+                        나온것.append(지문(pp))
+            return 나온것
+
+        말할것 = []
+        for n in 빠진것:
+            말할것.append(f'비교본에서 빠짐: {n} ({가.getinfo(n).file_size:,}바이트)')
+        for n in 들어온것:
+            말할것.append(f'비교본에 새로 들어옴: {n} ({나.getinfo(n).file_size:,}바이트)')
+        for n in 내용바뀜:
+            말할것.append(f'이름은 같은데 알맹이가 바뀜: {n} '
+                        f'({가.getinfo(n).file_size:,} → {나.getinfo(n).file_size:,}바이트)')
         for 이름, 태그 in (('그림', 'pic'), ('표', 'tbl'), ('글상자', 'rect')):
             ㄱ, ㄴ = 개체수(가, 태그), 개체수(나, 태그)
             if ㄱ != ㄴ:
-                차이있음 = True
-                적기(f'    ✗ {이름} 개수: {ㄱ}개 → {ㄴ}개')
+                말할것.append(f'{이름} 개수: {ㄱ}개 → {ㄴ}개')
+        if 쪽설정(가) != 쪽설정(나):
+            말할것.append('쪽 설정(용지 크기·방향·쪽 여백)이 바뀌었습니다')
+
+        if not 말할것:
+            적기('    ○ 같음')
+        else:
+            차이있음 = True
+            for m in 말할것:
+                적기(f'    ✗ {m}')
 
         가머리, 나머리 = 머리(가), 머리(나)
 
@@ -291,7 +334,7 @@ def main():
         가글모양, 나글모양 = 글자모양(가머리), 글자모양(나머리)
         적기()
         적기('[3] 글자 모양 정의 (크기·굵기·색)')
-        바뀜 = [k for k in sorted(set(가글모양) | set(나글모양), key=lambda x: int(x))
+        바뀜 = [k for k in sorted(set(가글모양) | set(나글모양), key=번호순)
               if (가글모양.get(k) or {}).get('지문') != (나글모양.get(k) or {}).get('지문')]
         if not 바뀜:
             적기(f'    ○ 같음 ({len(가글모양)}종)')
@@ -306,7 +349,7 @@ def main():
         가문모양, 나문모양 = 문단모양(가머리), 문단모양(나머리)
         적기()
         적기('[4] 문단 모양 정의 (정렬·줄간격·여백)')
-        바뀜 = [k for k in sorted(set(가문모양) | set(나문모양), key=lambda x: int(x))
+        바뀜 = [k for k in sorted(set(가문모양) | set(나문모양), key=번호순)
               if (가문모양.get(k) or {}).get('지문') != (나문모양.get(k) or {}).get('지문')]
         if not 바뀜:
             적기(f'    ○ 같음 ({len(가문모양)}종)')
@@ -317,25 +360,60 @@ def main():
             if len(바뀜) > 15:
                 적기(f'    … 그 밖에 {len(바뀜) - 15}종')
 
+        # ── 4-2. 머리 정보 나머지 ──────────────────────────────
+        #     3·4층은 charPr·paraPr '정의'만 본다. 그런데 그 정의는 번호로 다른 것을
+        #     가리킬 뿐이다 — 글꼴은 fontfaces에, 글자 음영은 borderFills에 있다.
+        #     정의를 통째로 담아도 참조 끝의 실체가 바뀌면 무음이 된다.
+        #     묶음째로 견줘 그 구멍을 막는다(실측: 한글 재저장판과 생성기판이 모두 같음).
+        묶음이름 = {'fontfaces': '글꼴', 'borderFills': '테두리·음영', 'styles': '스타일',
+                  'numberings': '번호매기기', 'tabProperties': '탭', 'bullets': '글머리표'}
+        적기()
+        적기('[4-2] 머리 정보 나머지 (글꼴·음영·스타일 등)')
+
+        def 묶음(뿌리, 이름):
+            if 뿌리 is None:
+                return None
+            for c in 뿌리.iter():
+                if c.tag.endswith('}' + 이름):
+                    return 지문(c)
+            return None
+
+        바뀐묶음 = [(이름, 뜻) for 이름, 뜻 in 묶음이름.items()
+                 if 묶음(가머리, 이름) != 묶음(나머리, 이름)]
+        if not 바뀐묶음:
+            적기('    ○ 같음')
+        else:
+            차이있음 = True
+            for 이름, 뜻 in 바뀐묶음:
+                적기(f'    ✗ {뜻}({이름})이 바뀌었습니다')
+
         # ── 5. 문단별 서식 ─────────────────────────────────────
         #     글자가 같은 문단끼리 견준다. 차례가 밀리지 않도록 SequenceMatcher로
         #     짝을 짓는다(단순히 같은 글자를 앞에서부터 꺼내 쓰면, 문단이 하나
         #     끼어들었을 때 그 뒤 전부가 엉뚱한 짝이 된다).
         적기()
-        적기('[5] 문단별 서식 (글자는 같은데 모양만 다른 곳)')
+        적기('[5] 문단별 서식 (모양이 다른 곳)')
+        #     빈 문단은 어차피 건너뛰므로 짝짓기 목록에서 뺀다. 빈 문단이 수백 개면
+        #     똑같은 문자열이 대량 반복되어 SequenceMatcher가 제곱으로 느려진다.
+        가쓸것 = [(i, t) for i, (t, _, _) in enumerate(가문단) if t]
+        나쓸것 = [(j, t) for j, (t, _, _) in enumerate(나문단) if t]
         맞춤 = difflib.SequenceMatcher(
-            None, [t for t, _, _ in 가문단], [t for t, _, _ in 나문단], autojunk=False)
+            None, [t for _, t in 가쓸것], [t for _, t in 나쓸것], autojunk=False)
         바뀐문단 = []
         for 태그, i1, i2, j1, j2 in 맞춤.get_opcodes():
-            if 태그 != 'equal':
+            if 태그 == 'delete' or 태그 == 'insert':
                 continue
+            #     ★ equal만 보면 "글자와 서식을 함께 고친 문단"을 통째로 건너뛴다.
+            #       (예: 30일→90일 + 굵게) 1층은 글자만 알려주므로 굵기를 되먹일 때 빠뜨린다.
+            #       replace 구간도 자리끼리 맞춰 서식을 견준다.
             for i, j in zip(range(i1, i2), range(j1, j2)):
-                글, ㄱ글모양, ㄱ문모양 = 가문단[i]
-                _, ㄴ글모양, ㄴ문모양 = 나문단[j]
-                if not 글:
-                    continue
+                가자리, 글 = 가쓸것[i]
+                나자리, 나글 = 나쓸것[j]
+                _, ㄱ글모양, ㄱ문모양 = 가문단[가자리]
+                _, ㄴ글모양, ㄴ문모양 = 나문단[나자리]
                 if ㄱ글모양 != ㄴ글모양 or ㄱ문모양 != ㄴ문모양:
-                    바뀐문단.append((글, ㄱ글모양, ㄴ글모양, ㄱ문모양, ㄴ문모양))
+                    보일글 = 글 if 태그 == 'equal' else f'{글}  →  {나글}'
+                    바뀐문단.append((보일글, ㄱ글모양, ㄴ글모양, ㄱ문모양, ㄴ문모양))
         if not 바뀐문단:
             적기('    ○ 같음')
         else:
