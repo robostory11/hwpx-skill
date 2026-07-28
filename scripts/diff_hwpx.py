@@ -58,7 +58,7 @@ def 지문(e):
       지나간다. 속성과 자식을 통째로 담아 "설명은 못 해도 달라졌다는 사실은 놓치지 않는다".
     """
     return (e.tag.split('}')[-1], tuple(sorted(e.attrib.items())),
-            (e.text or '').strip(),
+            (e.text or '').strip(), (e.tail or '').strip(),
             tuple(지문(c) for c in e))
 
 
@@ -296,14 +296,22 @@ def main():
             return sum(len(list(ET.fromstring(z.read(n)).iter(HP + 태그)))
                        for n in 구역파일(z))
 
-        #    쪽 설정 — 용지 크기·방향·쪽 여백. 여백이 바뀌면 쪽수가 바뀌고
-        #    쪽수가 바뀌면 서명 위치가 바뀐다. 4층의 '여백'은 문단 여백이라 다른 것이다.
+        #    쪽 설정 — 용지 크기·방향·쪽 여백·단·쪽 테두리·쪽 번호 시작값.
+        #    여백이 바뀌면 쪽수가 바뀌고 쪽수가 바뀌면 서명 위치가 바뀐다.
+        #    4층의 '여백'은 문단 여백이라 다른 것이다.
+        #    ★ secPr를 통째로 담지 않는다. 그 안의 머리말·꼬리말 본문(subList)에는
+        #      한글이 재저장할 때마다 달라지는 줄바꿈 정보가 들어 있어 거짓 경보가 난다.
+        #      머리말·꼬리말 글자는 1층이 이미 문단으로 읽는다.
+        #    ★ colPr(단 나누기)는 secPr 안이 아니라 그 옆에 있다(실측). secPr 안만
+        #      뒤지면 1단→2단 변경이 무음이 된다. 구역 파일 전체에서 찾는다.
+        쪽설정태그 = ('pagePr', 'colPr', 'pageBorderFill', 'startNum')
+
         def 쪽설정(z):
             나온것 = []
             for n in 구역파일(z):
-                for sec in ET.fromstring(z.read(n)).iter(HP + 'secPr'):
-                    for pp in sec.iter(HP + 'pagePr'):
-                        나온것.append(지문(pp))
+                뿌리 = ET.fromstring(z.read(n))
+                for 태그 in 쪽설정태그:
+                    나온것.extend(지문(e) for e in 뿌리.iter(HP + 태그))
             return 나온것
 
         말할것 = []
