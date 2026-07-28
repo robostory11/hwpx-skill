@@ -10,6 +10,8 @@ Checks:
 
 Usage:
     python validate.py document.hwpx
+    python validate.py document.hwpx --layout
+    python validate.py document.hwpx --hancom
 """
 
 import argparse
@@ -93,9 +95,34 @@ def main() -> None:
         description="Validate the structural integrity of an HWPX file"
     )
     parser.add_argument("input", help="Path to .hwpx file")
+    parser.add_argument(
+        "--layout",
+        action="store_true",
+        help="Also report likely table density and indentation layout warnings",
+    )
+    parser.add_argument(
+        "--hancom",
+        action="store_true",
+        help="Also require a real Hancom Office COM open check on Windows",
+    )
     args = parser.parse_args()
 
     errors = validate(args.input)
+    warnings: list[dict] = []
+
+    if args.layout:
+        from finalize_hwpx import find_layout_warnings
+
+        warnings = find_layout_warnings(args.input)
+
+    if args.hancom:
+        from finalize_hwpx import hancom_open_check
+
+        ok, message = hancom_open_check(args.input)
+        if not ok:
+            errors.append(message)
+        else:
+            print(f"HANCOM: {message}")
 
     if errors:
         print(f"INVALID: {args.input}", file=sys.stderr)
@@ -105,6 +132,18 @@ def main() -> None:
     else:
         print(f"VALID: {args.input}")
         print(f"  All structural checks passed.")
+        if warnings:
+            print(f"  Layout/text warnings: {len(warnings)}")
+            for warning in warnings[:30]:
+                location = ""
+                if "table" in warning:
+                    location = (
+                        f" table={warning['table']} row={warning['row']} "
+                        f"col={warning['col']}"
+                    )
+                print(f"  - {warning['type']}{location}: {warning['message']}")
+            if len(warnings) > 30:
+                print(f"  - ... {len(warnings) - 30} more")
 
 
 if __name__ == "__main__":

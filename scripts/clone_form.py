@@ -26,6 +26,16 @@ import re
 import sys
 import zipfile
 
+LINESEG_RE = re.compile(
+    rb"<hp:linesegarray\b[^>]*/>|<hp:linesegarray\b[^>]*>.*?</hp:linesegarray>",
+    re.DOTALL,
+)
+
+
+def _strip_linesegarray_bytes(data):
+    """Remove stale Hancom line layout caches from one XML payload."""
+    return LINESEG_RE.subn(b"", data)
+
 
 def extract_texts(hwpx_path):
     """HWPX에서 <hp:t> 태그의 텍스트를 모두 추출한다.
@@ -189,7 +199,7 @@ def _apply_keywords_in_xml(xml_text, sorted_keywords):
 
 
 def clone(src_path, dst_path, replacements=None, keywords=None,
-          title=None, creator=None):
+          title=None, creator=None, strip_linesegarray=True):
     """HWPX 양식을 복제하고 텍스트를 치환한다.
 
     Args:
@@ -204,6 +214,7 @@ def clone(src_path, dst_path, replacements=None, keywords=None,
     sorted_keywords = _prepare_keywords(keywords) if keywords else []
 
     tmp_path = dst_path + ".tmp"
+    removed_linesegarrays = 0
 
     with zipfile.ZipFile(src_path, "r") as zin:
         with zipfile.ZipFile(tmp_path, "w", zipfile.ZIP_DEFLATED) as zout:
@@ -237,6 +248,9 @@ def clone(src_path, dst_path, replacements=None, keywords=None,
                             )
 
                     data = text.encode("utf-8")
+                    if strip_linesegarray:
+                        data, removed = _strip_linesegarray_bytes(data)
+                        removed_linesegarrays += removed
 
                 # mimetype은 반드시 ZIP_STORED
                 if item.filename == "mimetype":
@@ -245,6 +259,7 @@ def clone(src_path, dst_path, replacements=None, keywords=None,
                     zout.writestr(item, data)
 
     os.replace(tmp_path, dst_path)
+    return removed_linesegarrays
 
 
 def validate_result(src_path, dst_path, replacements=None, keywords=None):
@@ -326,6 +341,11 @@ def main():
     parser.add_argument("--replace", nargs="*", help="CLI 치환 쌍 (old=new)")
     parser.add_argument("--title", help="문서 제목 메타데이터")
     parser.add_argument("--creator", help="작성자 메타데이터")
+    parser.add_argument(
+        "--keep-linesegarray",
+        action="store_true",
+        help="텍스트 치환 후 hp:linesegarray 레이아웃 캐시를 보존",
+    )
     parser.add_argument("--validate", action="store_true", help="치환 후 검증 실행")
 
     args = parser.parse_args()
@@ -372,9 +392,18 @@ def main():
         print(f"키워드 폴백 맵: {len(keywords)}개 항목 ({args.keywords})")
 
     # 복제 실행
-    clone(args.source, args.output, replacements, keywords,
-          title=args.title, creator=args.creator)
+    removed_linesegarrays = clone(
+        args.source,
+        args.output,
+        replacements,
+        keywords,
+        title=args.title,
+        creator=args.creator,
+        strip_linesegarray=not args.keep_linesegarray,
+    )
     print(f"복제 완료: {args.output}")
+    if not args.keep_linesegarray:
+        print(f"Removed hp:linesegarray layout caches: {removed_linesegarrays}")
 
     # 검증
     if args.validate:

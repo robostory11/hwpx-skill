@@ -1,2 +1,5 @@
+# convert_hwp.py가 자동 클론하는 변환기 (런타임 생성물)
+scripts/.hwp2hwpx-repo/
+.hwp2hwpx-repo/
 __pycache__/
 *.pyc
