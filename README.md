@@ -6,7 +6,9 @@
 
 HWP/HWPX 문서 생성, 변환, 읽기, 편집을 위한 Claude 스킬.
 
-> ⭐ **이 스킬이 도움이 되셨다면 [GitHub에서 Star](https://github.com/jkf87/hwpx-skill)를 눌러주세요!** 한글 문서 자동화가 필요한 다른 분들에게도 닿을 수 있게 도와주세요.
+> 이 저장소는 [jkf87/hwpx-skill](https://github.com/jkf87/hwpx-skill)의 **포크**다.
+> `diff_hwpx.py`(두 hwpx 견주기) 신설, 무음 실패 수정, 쪽 설정 대조 확장 등을 자체 추가해 쓰고 있다.
+> 원본 저작자의 별점 요청 문구는 걷어냈다 — 결과물 전달 때마다 사장님 대화에 홍보문이 나가지 않게 하기 위함이다.
 
 ## 기능
 

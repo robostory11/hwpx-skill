@@ -1,0 +1,49 @@
+#!/bin/sh
+# 병합(merge·pull) 직후 자동으로 포크 문지기를 부른다.
+#
+# 왜: 업스트림(jkf87/hwpx-skill)에서 받아오면 원저작자의 별점 요청 문구가 되살아나고
+#     우리가 넣은 diff_hwpx.py 수정이 되돌아갈 수 있다. "병합 후 확인하자"를 사람
+#     기억에 맡기면 잊는다. 그래서 병합할 때마다 기계가 대신 확인한다.
+#
+# 설치(환경을 새로 만들 때 한 번):
+#     git config core.hooksPath .githooks
+#
+# 이 훅은 병합을 되돌리지 못한다(이미 끝난 뒤에 돈다). 대신 시끄럽게 알려서
+# 사람이 곧바로 손보게 한다.
+#
+# ※ 변수명은 반드시 ASCII로 쓸 것. POSIX sh는 한글 변수명을 이름으로 인정하지 않아
+#   'root=... : No such file or directory'로 깨지면서도 종료코드 0을 돌려준다.
+#   2026-07-29에 실제로 그렇게 무음 실패했다. 훅을 고치면 반드시 아래로 시험할 것:
+#       sh .githooks/post-merge
+
+root=$(git rev-parse --show-toplevel 2>/dev/null)
+if [ -z "$root" ]; then
+  echo "!! 포크 문지기: 저장소 뿌리를 찾지 못해 검사를 건너뛰었습니다."
+  exit 0
+fi
+cd "$root" || {
+  echo "!! 포크 문지기: 저장소 폴더로 들어가지 못해 검사를 건너뛰었습니다."
+  exit 0
+}
+
+guard="scripts/fork_guard.py"
+if [ ! -f "$guard" ]; then
+  echo "!! 포크 문지기 파일이 없습니다: $guard"
+  echo "   병합이 이 검사 도구 자체를 지웠을 수 있습니다. 확인하십시오."
+  exit 0
+fi
+
+for py in python python3 py; do
+  if command -v "$py" >/dev/null 2>&1; then
+    "$py" "$guard" --조용히
+    code=$?
+    if [ "$code" -eq 2 ]; then
+      echo "!! 포크 문지기가 검사를 못 마쳤습니다. '문제 없음'이 아닙니다."
+    fi
+    exit 0
+  fi
+done
+
+echo "!! 파이썬을 찾지 못해 포크 문지기를 돌리지 못했습니다."
+echo "   직접 확인하십시오:  python scripts/fork_guard.py"
+exit 0
