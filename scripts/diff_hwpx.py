@@ -104,6 +104,30 @@ def 문단들(z):
     return 나온것
 
 
+def 줄흐름(z):
+    """[(쪽나누기인가, 글자)] — **빈 문단도 버리지 않고** 차례대로 남긴다.
+
+    ★ 왜 따로 있나 (2026-08-02 실제로 놓친 것)
+      1층은 빈 문단을 세지 않고, 5층은 짝짓기 전에 빈 문단을 아예 걸러낸다.
+      그래서 **글자를 하나도 안 건드린 수정**(빈 줄을 넣거나 빼기, 쪽 나누기로
+      다음 장으로 넘기기)은 어느 층에도 걸리지 않고 "차이 없음"으로 지나간다.
+      실제로 계약서 서명란을 다음 쪽으로 넘긴 수정을 이 도구가 못 잡았고,
+      그 사이 생성기가 덮어써 수정이 날아갔다. 그 자리를 이 층이 맡는다.
+    """
+    나온것 = []
+    for 이름 in 구역파일(z):
+        try:
+            뿌리 = ET.fromstring(z.read(이름))
+        except ET.ParseError:
+            continue
+        for p in 뿌리.iter(HP + 'p'):
+            글 = ''.join(''.join(t.itertext())
+                        for r in p.findall(HP + 'run')
+                        for t in r.findall(HP + 't')).strip()
+            나온것.append((p.get('pageBreak') not in (None, '0'), 글))
+    return 나온것
+
+
 def 머리(z):
     if 머리XML not in z.namelist():
         return None
@@ -440,6 +464,33 @@ def main():
                         f' → {문단모양설명(나문모양.get(ㄴ문))}]')
             if len(바뀐문단) > 20:
                 적기(f'    … 그 밖에 {len(바뀐문단) - 20}곳')
+
+        #     6층 — 글자를 안 건드린 수정. 위 다섯 층이 전부 놓치는 자리다.
+        적기()
+        적기('[6] 빈 줄·쪽 나누기 (글자가 안 바뀐 수정)')
+        가흐름, 나흐름 = 줄흐름(가), 줄흐름(나)
+        if 가흐름 == 나흐름:
+            적기(f'    ○ 같음 (문단 {len(가흐름)}개 · '
+                f'쪽 나누기 {sum(1 for b, _ in 가흐름 if b)}곳)')
+        else:
+            차이있음 = True
+            적기(f'    ✗ 다름 — 문단 {len(가흐름)}개 / {len(나흐름)}개 · '
+                f'쪽 나누기 {sum(1 for b, _ in 가흐름 if b)}곳 / '
+                f'{sum(1 for b, _ in 나흐름 if b)}곳')
+
+            def 보기(흐름):
+                return ['%s %s' % ('[쪽나눔]' if b else '       ', g[:44] or '(빈 줄)')
+                        for b, g in 흐름]
+            보인것 = 0
+            for 줄1 in difflib.unified_diff(보기(가흐름), 보기(나흐름),
+                                          '기준', '비교', lineterm='', n=1):
+                if 줄1.startswith(('---', '+++')):
+                    continue
+                적기('      ' + 줄1[:80])
+                보인것 += 1
+                if 보인것 >= 24:
+                    적기('      …')
+                    break
 
     적기()
     적기('=' * 64)
