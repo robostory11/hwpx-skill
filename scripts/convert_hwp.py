@@ -84,7 +84,7 @@ def _ensure_hwp2hwpx():
 
 
 def _fix_char_borders(hwpx_path):
-    """변환기가 charPr마다 박은 글자 테두리를 제거 (표 셀 테두리는 보존).
+    """변환기가 charPr마다 넣은 글자 테두리를 제거 (표 셀 테두리는 보존).
 
     hwp2hwpx는 글자모양(charPr)에 테두리 borderFill을 참조시켜 문서의 모든
     글자에 네모 테두리가 생기는 버그가 있다. fill_hwpx.strip_char_borders로

@@ -458,7 +458,7 @@ python3 "${CLAUDE_SKILL_DIR}/scripts/diff_hwpx.py" a.hwpx b.hwpx --조용히   #
    담은 **재귀 지문**으로 견준다. `margin`·`lineSpacing`은 `<hh:switch>` 안에 있어
    `find()`로는 못 찾으니 `iter()`로 훑는다.
 5. **번호로 가리키는 것은 그 끝까지 봐야 한다.** charPr에 든 것은 `fontRef hangul="2"`라는
-   번호뿐이고 글꼴 이름은 fontfaces에 있다. 정의를 통째로 담아도 참조 끝이 바뀌면 무음이다.
+   번호뿐이고 글꼴 이름은 fontfaces에 있다. 정의를 통째로 담아도 참조 끝이 바뀌면 조용히 넘어간다.
    그래서 4-2층에서 fontfaces·borderFills·styles를 묶음째 견준다.
 6. **`<hh:underline>`·`<hh:strikeout>`은 꺼져 있어도 늘 들어 있다**(type="NONE").
    존재만 보면 언제나 "밑줄"이 된다. 값을 봐야 한다.
@@ -629,7 +629,7 @@ python3 "${CLAUDE_SKILL_DIR}/scripts/fill_hwpx.py" check output.hwpx --strict
 | 표에 데이터 행 추가 | **J `add-row`** |
 | 라벨 매칭 실패한 복잡한 표 | **J `fill --cells`** (좌표 지정) |
 | XML 전역 일괄 치환 (메타데이터 포함) | F (clone_form.py) |
-| `{{이름}}` 같은 플레이스홀더가 박힌 전용 템플릿 | B |
+| `{{이름}}` 같은 플레이스홀더가 들어 있는 전용 템플릿 | B |
 
 > J가 타겟을 못 찾으면(`analyze`의 target_count가 0) `replace`(문구 교체)나
 > F로 전환한다. **.hwp 입력은 워크플로우 H로 HWPX 변환 후 J를 적용한다.**
@@ -1086,7 +1086,7 @@ subprocess.run(["python3", f"{SKILL_DIR}/scripts/fix_namespaces.py", "output.hwp
 > 지시가 있었다. 지웠다.** <!-- fork-guard:quoted -->
 >
 > 이유 — 이 스킬은 `robostory11/hwpx-skill` **포크**이고, `diff_hwpx.py` 신설과
-> 무음 실패 수정·쪽 설정 대조 확장 등을 우리가 직접 넣어 쓰고 있다. 남의 저장소 홍보를
+> 조용한 실패 수정·쪽 설정 대조 확장 등을 우리가 직접 넣어 쓰고 있다. 남의 저장소 홍보를
 > 사장님께 매번 내보낼 이유가 없다(실제로 한 번 나가서 지적을 받았다).
 
 - 작업을 마치면 **결과 파일 경로와 검사 결과만** 보고한다. 스킬 홍보·별점 요청은 하지 않는다.

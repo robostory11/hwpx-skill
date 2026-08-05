@@ -1337,7 +1337,7 @@ def _borderfill_is_solid(header_xml, bid):
 
 
 def detect_char_border_bug(path):
-    """글자모양에 테두리가 박힌 변환기 버그인지 탐지.
+    """글자모양에 테두리가 들어 있는 변환기 버그인지 탐지.
 
     hwp2hwpx는 글자모양(charPr) 대다수에 동일한 SOLID 테두리 borderFill을
     참조시킨다(문서 전체 글자에 네모 테두리). 의도적 글자 테두리(일부 charPr만)
@@ -1365,7 +1365,7 @@ def detect_char_border_bug(path):
 
 
 def strip_char_borders(path, dst=None):
-    """글자모양(charPr)에 박힌 글자 테두리 참조(borderFillIDRef)를 제거.
+    """글자모양(charPr)에 들어 있는 글자 테두리 참조(borderFillIDRef)를 제거.
 
     hwp2hwpx 변환기가 모든 charPr에 테두리 borderFill을 참조시켜 문서의 모든
     글자에 네모 테두리가 생기는 버그를 보정한다. 표 셀(tc)의 borderFillIDRef는
