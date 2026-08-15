@@ -232,7 +232,17 @@ def find_layout_warnings(
 
 
 def hancom_open_check(hwpx_path: str | Path, *, visible: bool = False) -> tuple[bool, str]:
-    """Try to open the HWPX file with Hancom Office through Windows COM."""
+    """Try to open the HWPX file with Hancom Office through Windows COM.
+
+    ★ 아래 finally의 무조건 Quit()은 **한글에서는 안전하다** (2026-08-15 실측).
+      파워포인트는 창을 여러 개 띄워도 프로세스가 하나라, COM이 돌고 있는 것에 붙고
+      Quit()이 사용자 창까지 닫는다(2026-08-09 실제 사고). 한글은 구조가 다르다 —
+      사용자가 띄운 창이 PID 30136으로 떠 있는 상태에서 COM으로 붙자 **새 프로세스
+      8568이 따로 생겼고**, Quit() 뒤 8568만 사라지고 30136은 살아남았다.
+      그래서 여기서는 "이미 실행 중이면 건너뛴다" 같은 방어를 두지 않는다.
+      (한때 그렇게 고쳤다가, 위험이 실재하지 않고 한글을 켜두면 검사가 아예 안 도는
+       부작용만 남아 되돌렸다. 다시 넣기 전에 위 실측부터 다시 해 볼 것.)
+    """
 
     if os.name != "nt":
         return False, "Hancom COM validation is only available on Windows."
