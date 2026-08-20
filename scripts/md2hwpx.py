@@ -366,6 +366,68 @@ def strip_markdown_formatting(text: str) -> str:
     return text
 
 
+# ─── 문단 안에서 끊긴 줄 잇기 ────────────────────────────────────
+
+#: 이 표시로 시작하는 줄은 **앞 문단에 붙이지 않고** 새 블록으로 본다
+_BLOCK_START = re.compile(
+    r"^(#{1,6}\s"           # 제목
+    r"|\|"                  # 표
+    r"|```"                 # 코드블록 울타리
+    r"|>"                   # 인용
+    r"|[-*+]\s"             # 글머리 목록
+    r"|\d+[.)]\s"           # 번호 목록
+    r"|-{3,}$|\*{3,}$"      # 수평선
+    r"|!\[)"                # 이미지
+)
+
+#: 그 줄 하나로 끝나는 블록 — 뒤에 오는 본문을 여기에 붙이면 안 된다
+_SELF_CLOSING = re.compile(r"^(#{1,6}\s|-{3,}$|\*{3,}$)")
+
+
+def join_soft_wraps(lines: list[str]) -> list[str]:
+    """문단 안에서 끊긴 줄을 하나로 잇는다.
+
+    ★ 마크다운은 문단 안의 줄바꿈을 **공백 하나**로 본다(CommonMark). 소스에서 보기 좋게
+      끊어 쓴 것을 그대로 두면 한글 문서에서도 그 자리에서 줄이 끊겨, 창 너비와 상관없이
+      어중간하게 잘린 문단이 된다.
+
+    ★★ 더 나쁜 것은 **여러 줄에 걸친 굵게 표시가 글자로 새는 것**이다. 이 변환기는 한 줄
+      안에서만 별표 짝을 맞추므로, 시작과 끝이 다른 줄에 있으면 별표가 그대로 화면에 나온다.
+      실제로 발주처에 보낼 문서에서 그렇게 새어 나왔다(2026-08-20).
+
+    ★ 코드블록·표·제목·목록·인용은 **줄 자체가 뜻을 가지므로** 잇지 않는다. 다만 목록과
+      인용은 마커 없이 이어 쓴 다음 줄을 자기 줄에 붙인다 — 그것이 같은 항목의 계속이다.
+    """
+    out: list[str] = []
+    in_code = False
+
+    for raw in lines:
+        stripped = raw.strip()
+
+        if stripped.startswith('```'):
+            in_code = not in_code
+            out.append(raw)
+            continue
+        if in_code:
+            out.append(raw)
+            continue
+
+        # 빈 줄은 문단 경계다 — 그대로 둔다
+        if not stripped:
+            out.append(raw)
+            continue
+
+        prev = out[-1].strip() if out else ""
+        can_extend = bool(prev) and not _SELF_CLOSING.match(prev) and not prev.startswith('|')
+
+        if can_extend and not _BLOCK_START.match(stripped):
+            out[-1] = out[-1].rstrip() + " " + stripped
+        else:
+            out.append(raw)
+
+    return out
+
+
 def parse_markdown_table(lines: list[str]) -> tuple[list[str], list[list[str]]]:
     """마크다운 파이프 테이블 파싱. (headers, rows) 반환."""
     if len(lines) < 2:
@@ -390,7 +452,7 @@ def md_to_section(md_text: str, template: str = "report") -> tuple[str, str]:
     """
     profile = STYLE_PROFILES.get(template, STYLE_PROFILES["report"])
     builder = SectionBuilder(profile)
-    lines = md_text.split('\n')
+    lines = join_soft_wraps(md_text.split('\n'))
     title = ""
     i = 0
 

@@ -275,6 +275,53 @@ def hancom_open_check(hwpx_path: str | Path, *, visible: bool = False) -> tuple[
                 pass
 
 
+def hancom_resave(hwpx_path: str | Path, *, visible: bool = False) -> tuple[bool, str]:
+    """한컴으로 열어 **같은 자리에 다시 저장**한다 — 미리보기·줄배치 캐시를 만든다.
+
+    ★ 왜 필요한가: 프로그램이 조립한 HWPX에는 한컴이 만드는 **미리보기 그림과 줄배치
+      캐시가 없다.** `fill_hwpx.py check`가 그 상태를 «raw 파일 의심»으로 잡고
+      *"한컴에서 한 번 열어 저장하세요"*라고 안내하는데, **그것을 사람 손에 맡기면
+      바쁠 때 그냥 넘어간다.** 실제로 그 경로에서 «빈 페이지로 열림» 사고가 났다.
+      기계가 하게 만든다.
+
+    ★ 저장하면 한컴이 문서를 자기 방식으로 다시 쓰므로, **저장 뒤에는 XML을 다시 손대지
+      않는다.** 손대면 캐시가 다시 낡아 같은 자리로 돌아온다 — 이 함수는 마지막에 부른다.
+    """
+    if os.name != "nt":
+        return False, "한컴 재저장은 Windows에서만 됩니다."
+
+    try:
+        import win32com.client  # type: ignore
+    except ImportError:
+        return False, "pywin32가 없습니다 — 재저장을 못 합니다."
+
+    path = str(Path(hwpx_path).resolve())
+    hwp = None
+    try:
+        hwp = win32com.client.Dispatch("HWPFrame.HwpObject")
+        try:
+            hwp.XHwpWindows.Item(0).Visible = visible
+        except Exception:
+            pass
+        try:
+            hwp.RegisterModule("FilePathCheckDLL", "FilePathCheckerModule")
+        except Exception:
+            pass
+        if not bool(hwp.Open(path, "", "")):
+            return False, "한컴이 파일을 열지 못했습니다 — 재저장 안 됨."
+        # 형식을 HWPX로 못 박는다. 확장자만 보고 HWP로 저장하면 조용히 형식이 바뀐다.
+        saved = bool(hwp.SaveAs(path, "HWPX", ""))
+        return (saved, "한컴으로 다시 저장했습니다." if saved else "한컴 SaveAs가 실패했습니다.")
+    except Exception as exc:  # pragma: no cover - requires Hancom/COM
+        return False, f"한컴 재저장 실패: {exc}"
+    finally:
+        if hwp is not None:
+            try:
+                hwp.Quit()
+            except Exception:
+                pass
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Finalize and quality-check an HWPX file")
     parser.add_argument("input", help="Path to .hwpx file")
@@ -286,6 +333,11 @@ def main() -> None:
     )
     parser.add_argument("--layout", action="store_true", help="Run table density and text indentation warnings")
     parser.add_argument("--hancom", action="store_true", help="Open the file with Hancom Office through Windows COM")
+    parser.add_argument(
+        "--hancom-resave",
+        action="store_true",
+        help="한컴으로 열어 같은 자리에 다시 저장 — 미리보기·줄배치 캐시를 만든다(맨 마지막에 실행)",
+    )
     parser.add_argument("--visible", action="store_true", help="Show the Hancom window during --hancom validation")
     parser.add_argument("--json", dest="json_path", help="Write machine-readable report JSON")
     args = parser.parse_args()
@@ -313,6 +365,13 @@ def main() -> None:
     if args.hancom:
         ok, message = hancom_open_check(check_path, visible=args.visible)
         report["hancom"] = {"ok": ok, "message": message}
+        if not ok:
+            report["errors"].append(message)
+
+    # ★ 재저장은 **맨 마지막**이다 — 그 뒤에 XML을 손대면 방금 만든 캐시가 다시 낡는다
+    if args.hancom_resave:
+        ok, message = hancom_resave(check_path, visible=args.visible)
+        report["hancom_resave"] = {"ok": ok, "message": message}
         if not ok:
             report["errors"].append(message)
 
