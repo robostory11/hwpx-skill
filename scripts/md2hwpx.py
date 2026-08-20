@@ -59,7 +59,10 @@ STYLE_PROFILES = {
         "list_l2":      {"charPr": "0",  "paraPr": "25"},  # 들여쓰기 2
         "list_l3":      {"charPr": "0",  "paraPr": "26"},  # 들여쓰기 3
         "table_header": {"charPr": "9",  "paraPr": "21"},  # 볼드, 표 가운데
-        "table_cell":   {"charPr": "0",  "paraPr": "22"},  # 표 본문
+        # ★ 표 셀은 **가운데**다. 전에는 22(양쪽 정렬)였는데, 양쪽 정렬은 셀 폭이 좁아
+        #   글자 사이가 벌어져 보기 나쁘다. 사장님이 한글에서 직접 21로 고치신 것을
+        #   되먹였다(2026-08-20 · 발주처 준비물 문서에서 12곳).
+        "table_cell":   {"charPr": "0",  "paraPr": "21"},  # 표 본문 — 가운데
     },
     "gonmun": {
         "title":        {"charPr": "7",  "paraPr": "20"},
