@@ -83,6 +83,25 @@ On Windows with Hancom Office installed, add a real open test:
 python3 "${CLAUDE_SKILL_DIR}/scripts/validate.py" output.hwpx --hancom
 ```
 
+### ★★ 프로그램이 조립한 문서는 **한컴으로 다시 저장**한다 (2026-08-20 신설)
+
+`build_hwpx.py`·`md2hwpx.py`처럼 **처음부터 조립한** hwpx에는 한컴이 만드는
+**미리보기 그림과 줄배치 캐시가 없다.** 그 상태를 `fill_hwpx.py check`가
+«raw 파일 의심»으로 잡고 *"한컴에서 한 번 열어 저장하세요"*라고 안내하는데,
+**그것을 사람 손에 맡기면 바쁠 때 그냥 넘어간다** — 「빈 페이지로 열림」 사고가 그 경로였다.
+
+```bash
+# ★ 맨 마지막에 — 이 뒤에 XML을 손대면 방금 만든 캐시가 다시 낡는다
+python3 "${CLAUDE_SKILL_DIR}/scripts/finalize_hwpx.py" output.hwpx --hancom-resave
+python3 "${CLAUDE_SKILL_DIR}/scripts/fill_hwpx.py" check output.hwpx --strict   # ok: true 확인
+```
+
+실측(2026-08-20) — 재저장 전 `raw_llm_suspect: true` · `preview_chars: 0` →
+재저장 후 `false` · `768`, `check --strict`가 `ok: true`로 바뀌었다.
+
+※ **워크플로우 J(`fill`/`replace`)로 만든 것은 이 단계가 필요 없다** — 한컴이 저장한
+  원본을 베이스로 하므로 캐시가 이미 들어 있다. 조립형(A·D)에만 해당한다.
+
 Rules:
 
 1. After any XML-level text replacement, remove `hp:linesegarray`. These are
