@@ -27,6 +27,8 @@ ${CLAUDE_SKILL_DIR}/
 │   ├── text_extract.py        # 텍스트 추출
 │   ├── build_problem_answer_sheet.py  # 문제지 1장 + 답안지 1장 생성
 │   ├── diff_hwpx.py           # ★ 두 hwpx 견주기 (사람이 손으로 고친 것 찾기)
+│   ├── hancom_style.py        # ★★ 한글답게 다듬기 — 표 셀 여백·열 너비·글꼴 (밖으로 나가는 문서 필수)
+│   ├── hancom_style_selftest.py  # ★ 위 도구가 여섯 결함을 실제로 막는지 재는 시험(25항목)
 │   ├── md2hwpx.py             # 마크다운→HWPX 자동 변환
 │   ├── gonmun.py              # ★ 행정안전부 표준 기안문(별지 제1호서식) 생성기 (Workflow G)
 │   ├── gonmun_lint.py         # ★ 공문서 작성법 자동 검수기 (2025 편람)
@@ -82,6 +84,40 @@ On Windows with Hancom Office installed, add a real open test:
 ```bash
 python3 "${CLAUDE_SKILL_DIR}/scripts/validate.py" output.hwpx --hancom
 ```
+
+### ★★★ 프로그램이 조립한 표는 **글씨가 셀 벽에 붙는다** (2026-08-22 신설)
+
+사장님이 발송 직전에 눈으로 잡으셨다 — *"너가 만든거는 글씨가 표안에 그냥 여유없이 바로
+붙어있어. 근데 기본 표 속성은 내부에 어느정도 너비 간격이 존재하거든."*
+
+원인은 `<hp:cellMargin>`이다. `md2hwpx.py`·`build_hwpx.py`가 만든 표는
+`left/right="170" top/bottom="0"`이라 **좌우가 한글 기본의 3분의 1이고 위아래가 0**이다.
+실측(한컴이 만든 실제 문서 넷 · cellMargin 전수)에서 기본값은 **`510/510/141/141`**이었다.
+
+```bash
+python "C:/Users/robo/.claude/skills/hwpx-skill/scripts/hancom_style.py" all 문서.hwpx
+#   fix  = 셀 여백을 한글 기본으로   fit = 열 너비를 글자 수에 맞춰
+#   font = 글꼴을 맑은 고딕으로      all = 셋 다
+python "C:/Users/robo/.claude/skills/hwpx-skill/scripts/hancom_style.py" check 문서.hwpx
+```
+
+★ 도구를 고쳤으면 **자체 시험을 돌린다** — 교차검증이 잡은 여섯 결함(중첩 표 훼손 ·
+속성 순서 강제 · 폭 오독 · XML 이스케이프 누락 · 검증 없는 덮어쓰기 · 조용한 0건)이
+되살아나는지 25항목으로 잰다. **전부 「고치기 전 코드에서 실패하던 것」이다.**
+
+```bash
+python "C:/Users/robo/.claude/skills/hwpx-skill/scripts/hancom_style_selftest.py"
+```
+
+★★ **밖으로 나가는 문서(발주처·관공서 제출)는 글꼴을 맑은 고딕으로 바꾼다.**
+한컴 기본인 **함초롬돋움·함초롬바탕은 한컴오피스를 깐 PC에만 있어** 받는 쪽이 뷰어나
+다른 프로그램으로 열면 글꼴이 바뀌어 줄이 밀린다. 맑은 고딕은 윈도우 기본 글꼴이다.
+
+★ **`all`을 돌린 뒤 아래 「한컴으로 다시 저장」을 이어서 한다** — 표를 손댔으니 줄배치
+캐시가 낡는다(도구가 그 표 안의 캐시만 지우므로 한컴이 새로 만들어 줘야 한다).
+
+★ 열 너비 맞춤은 **병합된 칸(colSpan·rowSpan)이 있는 표를 건너뛴다** — 좌표가 어긋나면
+표가 통째로 깨진다. 건너뛴 표 수를 결과에 찍으므로 **조용히 빠지지 않는다.**
 
 ### ★★ 프로그램이 조립한 문서는 **한컴으로 다시 저장**한다 (2026-08-20 신설)
 
@@ -1095,7 +1131,10 @@ subprocess.run(["python3", f"{SKILL_DIR}/scripts/fix_namespaces.py", "output.hwp
 17. **Check strict table layout**: run `finalize_hwpx.py --layout` and fix long single-paragraph cells by splitting paragraphs and increasing row heights.
 18. **Real openability check**: on Windows with Hancom installed, run `validate.py --hancom`; ZIP/XML validation alone is not enough.
 19. **변환 후 글자 테두리 보정**: `.hwp` 변환 시 `convert_hwp.py`가 글자 테두리 버그를 자동 제거. 이미 변환된 파일은 `fill_hwpx.py fix-borders`로 보정
-20. **배포 전 열림 점검**: 사용자에게 파일을 주기 전 `fill_hwpx.py check --strict`로 secPr 불완전(손상 문서)·raw 파일(빈 페이지)을 확인
+20. **표를 만들었으면 `hancom_style.py all`**: `md2hwpx`·`build_hwpx`가 만든 표는 셀 여백이
+    `170/170/0/0`이라 글씨가 벽에 붙는다. 밖으로 나가는 문서는 글꼴도 맑은 고딕으로 바꾼다
+    (함초롬은 한컴 깐 PC에만 있다). 돌린 뒤 한컴 재저장 → `fill_hwpx.py check --strict`
+21. **배포 전 열림 점검**: 사용자에게 파일을 주기 전 `fill_hwpx.py check --strict`로 secPr 불완전(손상 문서)·raw 파일(빈 페이지)을 확인
 
 ---
 
