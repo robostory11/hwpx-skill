@@ -255,10 +255,10 @@ def main() -> int:
         "자기닫힘 태그를 여는 태그로 세지 않았다",
     )
     siblings = H._blocks("<hp:tbl a>A</hp:tbl><hp:tbl b>B</hp:tbl>", "tbl")
-    ok(len(siblings) == 2, "형제 표 둘을 다 찾았다")
+    ok(len(siblings) == 2, "나란히 있는 표 둘을 다 찾았다")
     ok(
         len(siblings) == 2 and siblings[0][1] <= siblings[1][0],
-        "형제 표의 범위가 겹치지 않는다",
+        "나란히 있는 표의 범위가 겹치지 않는다",
     )
 
     print()
