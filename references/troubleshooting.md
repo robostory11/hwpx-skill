@@ -151,3 +151,34 @@ python3 scripts/finalize_hwpx.py output.hwpx --layout
 
 The layout check is warning-based. It identifies likely risks that still need
 template-aware review.
+
+## 한컴 재저장이 안 끝날 때 (2026-09-02 실측)
+
+#### ★★★ 재저장이 안 끝나면 **작은 파일로 먼저 재 볼 것** (2026-09-02 신설)
+
+`hancom_resave` 가 `hwp.Open()` 에서 **영영 안 끝나는** 일이 있다. 그때 «문서가 무거워서»로
+읽고 그림을 줄이는 데 시간을 쓰기 쉬운데, **크기와 상관없는 경우가 있다.**
+
+실측(tattoo-da 결과보고서) — 9MB·그림 46장 짜리가 900초를 넘겨 멈췄다. 그림을 줄여 4MB 로
+만들어도 같았고, **1.4MB 짜리 다른 hwpx 도 똑같이 멈췄다**(180초). `RegisterModule` 은
+성공했으므로 파일 경로 보안 모듈 문제도 아니다. 한글이 **안 보이는 창에 확인 대화상자를
+띄우고 기다리는 것**으로 의심된다.
+
+**가르는 법 — 작은 파일 하나로 30초면 끝난다:**
+
+```python
+import win32com.client
+hwp = win32com.client.Dispatch("HWPFrame.HwpObject")
+hwp.RegisterModule("FilePathCheckDLL", "FilePathCheckerModule")
+print(hwp.Open(r"작은파일.hwpx", "HWPX", "forceopen:true"))  # 여기서 멈추면 환경 문제다
+```
+
+- **작은 파일도 멈춘다** → 환경 문제다. 재저장을 **시간 상한을 걸어 건너뛰고**,
+  「사람이 한글에서 한 번 열어 저장해 주십시오」를 **보고에 적는다.** 조용히 넘기지 않는다.
+- **작은 파일은 되는데 큰 것만 멈춘다** → 그때가 그림을 줄일 자리다.
+
+★ `subprocess.run(..., timeout=…)` 으로 상한을 걸 것. 상한이 없으면 «도는 중»과
+«멈춤»이 구별되지 않아 한 번에 15분씩 날아간다.
+
+※ **워크플로우 J(`fill`/`replace`)로 만든 것은 이 단계가 필요 없다** — 한컴이 저장한
+  원본을 베이스로 하므로 캐시가 이미 들어 있다. 조립형(A·D)에만 해당한다.
