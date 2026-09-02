@@ -154,6 +154,44 @@ template-aware review.
 
 ## 한컴 재저장이 안 끝날 때 (2026-09-02 실측)
 
+### ★★★★★ 그 「환경 문제」의 정체 — 보안 모듈 등록이 죽은 경로를 가리킨다 (2026-09-02 해결)
+
+아래 절을 쓴 날 저녁에 **원인을 잡고 고쳤다.** paperwork 저장소를 뒤져 나온 것이다.
+
+| 실측 | 값 |
+|---|---|
+| `HKCU\Software\HNC\HwpAutomation\Modules` 의 `FilePathCheckerModule` | `C:\dev\reportshot\venv\Lib\site-packages\pyhwpx\FilePathCheckerModule.dll` |
+| 그 파일 | **없다.** `C:\dev\reportshot` 폴더가 2026-08-16 에 지워졌다(`C:\dev\.projects-meta.yml:374`) |
+| 살아 있는 같은 DLL | `%APPDATA%\Python\Python3xx\site-packages\pyhwpx\FilePathCheckerModule.dll` (pyhwpx 설치본) |
+
+**왜 조용히 실패하나** — `RegisterModule` 은 **레지스트리에 이름이 적혀 있으면 성공**이라
+답한다. DLL 이 실제로 로드됐는지는 안 본다. 안 붙으면 한글이 파일을 열 때 **승인
+대화상자**를 띄우는데(`C:\dev\assistant\scripts\hwp-to-pdf.ps1:74` 에 이미 적혀 있던 사실),
+`finalize_hwpx.py` 가 `Visible = False` 로 창을 감춘 뒤 열기 때문에 **못 보고 못 누르는
+대화상자 앞에서 영영 기다린다.** 파일 크기와 무관했던 것이 이 설명과 정확히 맞는다.
+
+**고치는 법**
+
+```
+taskkill /F /IM Hwp.exe
+python -c "from pyhwpx import Hwp; Hwp.register_regedit()"
+reg query "HKCU\Software\HNC\HwpAutomation\Modules" /v FilePathCheckerModule
+```
+
+실측: 900초를 넘겨 멈추던 열기가 **0.2초**로 끝났다.
+
+**paperwork 에서 함께 배운 것 둘**
+
+- 거기 19곳이 전부 `Open(경로, "HWPX", "")` 로 **형식을 못박는다.** 이 스킬은 `Open(path, "", "")`
+  이다. `""` 로도 돌던 실측이 있어 단독 원인으로 단정하지는 않았지만, 실제로 돌던 쪽에
+  맞추는 편이 안전하다.
+- *"다른 한글 인스턴스가 떠 있으면 `PageCount` 가 1로 나오는 등 엉뚱한 값이 온다"* —
+  재기 전에 `taskkill /F /IM Hwp.exe` 를 먼저 한다.
+
+**★★ 재저장 뒤에는 내용이 남았는지 센다.** paperwork 메모리에 *"보안 모듈 미등록 환경에서
+문서 일부만 로드해 내용이 잘린다(표 20개 중 5개만 저장)"* 는 사고 기록이 있다.
+`section0.xml` 의 `<hp:tbl` · `<hp:pic` 수와 `BinData/` 파일 수를 재저장 전후로 견준다.
+
 #### ★★★ 재저장이 안 끝나면 **작은 파일로 먼저 재 볼 것** (2026-09-02 신설)
 
 `hancom_resave` 가 `hwp.Open()` 에서 **영영 안 끝나는** 일이 있다. 그때 «문서가 무거워서»로
