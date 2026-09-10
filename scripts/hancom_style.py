@@ -465,7 +465,7 @@ def main() -> int:
         print(__doc__)
         return 2
     what, target = argv[0], Path(argv[1])
-    if not target.exists():
+    if not target.exists():   # 부재판정-허용: 못 읽으면 「파일이 없습니다」를 찍고 2로 끝난다 — 조용하지 않다
         print("파일이 없습니다: %s" % target)
         return 2
 

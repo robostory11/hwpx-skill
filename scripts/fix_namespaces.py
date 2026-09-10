@@ -101,7 +101,7 @@ if __name__ == "__main__":
         sys.exit(1)
 
     path = sys.argv[1]
-    if not os.path.exists(path):
+    if not os.path.exists(path):   # 부재판정-허용: 못 읽으면 오류를 찍고 exit 1 로 멈춘다 — 조용하지 않다
         print(f"Error: File not found: {path}")
         sys.exit(1)
 

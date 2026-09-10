@@ -350,7 +350,7 @@ def main():
 
     args = parser.parse_args()
 
-    if not os.path.exists(args.source):
+    if not os.path.exists(args.source):   # 부재판정-허용: 못 읽으면 오류를 찍고 exit 1 로 멈춘다 — 조용하지 않다
         print(f"Error: 파일을 찾을 수 없음: {args.source}")
         sys.exit(1)
 

@@ -156,7 +156,7 @@ def blank_text(text: str, keywords: list[str]) -> str:
 
 
 def build_problem_answer_sheet(data: dict, output: Path) -> None:
-    if not REFERENCE_HWPX.exists():
+    if not REFERENCE_HWPX.exists():   # 부재판정-허용: 못 읽으면 SystemExit 로 멈춘다 — 조용하지 않다
         raise SystemExit(f"Missing reference template: {REFERENCE_HWPX}")
     reset_id()
     title = clean_text(data.get("title")) or "수업 활동지"

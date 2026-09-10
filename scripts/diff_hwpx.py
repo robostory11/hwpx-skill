@@ -226,7 +226,7 @@ def 문단모양설명(d):
 
 def 열기(경로):
     p = Path(경로)
-    if not p.exists():
+    if not p.exists():   # 부재판정-허용: 못 읽으면 오류를 찍고 exit 2 로 멈춘다 — 조용하지 않다
         print(f'✗ 파일이 없습니다: {p}')
         sys.exit(2)
     if p.suffix.lower() != '.hwpx':

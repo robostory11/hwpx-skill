@@ -59,7 +59,7 @@ def _ensure_hwp2hwpx():
     ]
     for path in candidates:
         full = os.path.abspath(path)
-        if os.path.isdir(os.path.join(full, "hwp2hwpx")):
+        if os.path.isdir(os.path.join(full, "hwp2hwpx")):   # 부재판정-허용: 못 읽으면 로컬 클론을 건너뛰고 GitHub 에서 받는 쪽으로 간다 — 화면에 「클론 중」이 뜬다
             sys.path.insert(0, full)
             try:
                 import hwp2hwpx  # noqa: F401
@@ -70,7 +70,7 @@ def _ensure_hwp2hwpx():
     # GitHub에서 클론
     clone_dir = os.path.join(os.path.dirname(__file__), "..", ".hwp2hwpx-repo")
     clone_dir = os.path.abspath(clone_dir)
-    if not os.path.isdir(os.path.join(clone_dir, "hwp2hwpx")):
+    if not os.path.isdir(os.path.join(clone_dir, "hwp2hwpx")):   # 부재판정-허용: 못 읽으면 git clone 이 돌고, 폴더가 이미 있으면 check_call 이 시끄럽게 실패한다
         print("[convert_hwp] hwp2hwpx 레포 클론 중...")
         subprocess.check_call(
             ["git", "clone", "--depth", "1",
@@ -162,7 +162,7 @@ def main():
                         help="글자 테두리 자동 제거를 끔 (변환 결과 그대로 유지)")
     args = parser.parse_args()
 
-    if not os.path.exists(args.input):
+    if not os.path.exists(args.input):   # 부재판정-허용: 못 읽으면 오류를 찍고 exit 1 로 멈춘다 — 조용하지 않다
         print(f"오류: 파일을 찾을 수 없습니다: {args.input}", file=sys.stderr)
         sys.exit(1)
 

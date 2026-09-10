@@ -115,7 +115,7 @@ def verify(source_path=None, result_path=None, json_output=None):
     """
     report = {"status": "UNKNOWN", "issues": [], "warnings": []}
 
-    if not result_path or not os.path.exists(result_path):
+    if not result_path or not os.path.exists(result_path):   # 부재판정-허용: 못 읽으면 status=FAIL 과 「결과 파일 없음」을 보고에 담는다 — 조용하지 않다
         report["status"] = "FAIL"
         report["issues"].append(f"결과 파일 없음: {result_path}")
         return report
@@ -139,7 +139,30 @@ def verify(source_path=None, result_path=None, json_output=None):
         )
 
     # 2. 원본과 비교 (제공된 경우)
-    if source_path and os.path.exists(source_path):
+    #
+    # ★★ 전에는 `os.path.exists(source_path)` 하나로 갈랐다. 그 함수는 **권한 오류에도
+    #   False** 라, 원본을 **못 읽은 것**이 「원본을 안 줬다」와 똑같이 취급되어
+    #   구조 보존 비교와 크기 비율 검사가 **통째로 건너뛰어지고**, 그런데도 아래 최종 판정이
+    #   issues 도 warnings 도 없다며 **PASS 를 찍었다.** 검수를 반만 하고 통과라고 말하는
+    #   자리였다. 이제 셋을 가른다 — 안 줬다 / 없다 / 못 읽었다.
+    source_state = "not_given"
+    if source_path:
+        try:
+            os.stat(source_path)
+            source_state = "ok"
+        except (FileNotFoundError, NotADirectoryError):
+            source_state = "missing"
+        except OSError as e:
+            source_state = f"unreadable:{e}"
+
+    if source_state == "missing":
+        report["issues"].append(f"원본 파일 없음: {source_path} — 원본 대조를 못 했다")
+    elif source_state.startswith("unreadable:"):
+        report["issues"].append(
+            f"원본 파일을 못 읽었다: {source_path} ({source_state.split(':', 1)[1]}) "
+            "— 원본 대조를 못 했다")
+
+    if source_state == "ok":
         source_info = _count_structure(source_path)
         report["source"] = source_info
 

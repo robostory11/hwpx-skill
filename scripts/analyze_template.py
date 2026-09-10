@@ -384,7 +384,7 @@ def main():
                         help='section0.xml을 지정 경로로 추출')
     args = parser.parse_args()
 
-    if not os.path.exists(args.input):
+    if not os.path.exists(args.input):   # 부재판정-허용: 못 읽으면 오류를 찍고 exit 1 로 멈춘다 — 조용하지 않다
         print(f"Error: {args.input} not found")
         sys.exit(1)
 
@@ -396,7 +396,7 @@ def main():
         header_path = os.path.join(tmpdir, 'Contents', 'header.xml')
         section_path = os.path.join(tmpdir, 'Contents', 'section0.xml')
 
-        if not os.path.exists(header_path) or not os.path.exists(section_path):
+        if not os.path.exists(header_path) or not os.path.exists(section_path):   # 부재판정-허용: 못 읽으면 오류를 찍고 exit 1 로 멈춘다 — 조용하지 않다
             print("Error: Contents/header.xml or Contents/section0.xml not found")
             sys.exit(1)
 

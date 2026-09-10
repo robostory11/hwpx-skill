@@ -57,7 +57,7 @@ def main() -> None:
     parser.add_argument("output", help="Output .hwpx file path")
     args = parser.parse_args()
 
-    if not os.path.isdir(args.input):
+    if not os.path.isdir(args.input):   # 부재판정-허용: 못 읽으면 오류를 찍고 exit 1 로 멈춘다 — 조용하지 않다
         print(f"Error: Directory not found: {args.input}", file=sys.stderr)
         sys.exit(1)
 

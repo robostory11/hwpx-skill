@@ -33,6 +33,7 @@ Claude Code의 PreToolUse 훅으로 등록하면, Bash 도구 호출 직전에 �
 import json
 import os
 import re
+import stat as stat_module
 import subprocess
 import sys
 
@@ -62,7 +63,7 @@ def find_target_hwpx(command):
     if re.search(r"\bopen\b", command) or is_delivery_dest:
         for c in candidates:
             path = os.path.expanduser(c)
-            if os.path.isfile(path):
+            if os.path.isfile(path):   # 부재판정-허용: 못 읽으면 아래 「존재 파일이 없으면 첫 후보」로 내려가 검사 대상이 사라지지 않는다
                 return path
         # 존재 파일이 없으면 첫 후보 (목적지로 막 복사될 파일일 수 있음)
         return os.path.expanduser(candidates[0])
@@ -80,7 +81,21 @@ def main():
         return 0
 
     target = find_target_hwpx(command)
-    if not target or not os.path.isfile(target):
+    if not target:
+        return 0
+    # ★ `os.path.isfile` 은 **권한 오류에도 False** 라, 못 읽은 것이 「파일이 아니다」가 되어
+    #   검사가 통째로 조용히 빠진다 — 훅이 꺼진 것과 같은데 아무 신호도 안 난다.
+    #   그래서 열어 보고 errno 로 가른다: 진짜 부재는 조용히, 못 본 것은 사람 눈에 남긴다.
+    #   (훅은 작업을 막지 않는 것이 원칙이라 어느 쪽이든 0으로 끝낸다.)
+    try:
+        mode = os.stat(target).st_mode
+    except (FileNotFoundError, NotADirectoryError):
+        return 0
+    except OSError as e:
+        print(f"[hwpx_guard] 검사 대상을 못 읽어 검사를 건너뜁니다: {target} ({e})",
+              file=sys.stderr)
+        return 0
+    if not stat_module.S_ISREG(mode):
         return 0
 
     skill_dir = os.path.dirname(os.path.abspath(__file__))

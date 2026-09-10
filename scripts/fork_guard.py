@@ -110,7 +110,7 @@ def 홍보문_찾기():
     걸린것 = []
     for 이름 in 홍보검사대상:
         길 = 뿌리 / 이름
-        if not 길.exists():
+        if not 길.exists():   # 부재판정-허용: 못 읽어도 「파일이 없다」로 걸린 목록에 담아 보고한다 — 조용히 빠지지 않는다
             걸린것.append((이름, 0, '파일이 없다', '검사 대상 파일이 사라졌다'))
             continue
         for 번호, 줄 in enumerate(길.read_text(encoding='utf-8').splitlines(), 1):
@@ -128,7 +128,7 @@ def 우리것_확인():
     잃은것 = []
     for 자산 in 우리자산:
         길 = 뿌리 / 자산['파일']
-        if not 길.exists():
+        if not 길.exists():   # 부재판정-허용: 못 읽어도 「파일이 통째로 사라졌다」로 담아 보고한다 — 조용히 빠지지 않는다
             잃은것.append((자산['파일'], '파일이 통째로 사라졌다', 자산['무엇']))
             continue
         글 = 길.read_text(encoding='utf-8', errors='replace')

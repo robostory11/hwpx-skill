@@ -79,8 +79,10 @@ def strip_linesegarray(hwpx_path: str | Path, output_path: str | Path | None = N
 
         os.replace(tmp, dst)
     finally:
-        if tmp.exists():
-            tmp.unlink()
+        # ★ 전에는 `tmp.exists()` 로 먼저 물었다. 그 함수는 **권한 오류에도 False** 라
+        #   못 지운 임시 파일이 「없다」가 되어 조용히 남는다. `missing_ok=True` 는
+        #   진짜 부재만 넘기고, 못 지운 것은 예외로 올려 시끄럽게 만든다.
+        tmp.unlink(missing_ok=True)
 
     return total_removed
 

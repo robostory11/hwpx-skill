@@ -197,7 +197,7 @@ def main() -> int:
     except RuntimeError:
         ok(True, "깨진 결과를 막았다")
     ok(doc.read_bytes() == original, "원본이 그대로다")
-    ok(not doc.with_suffix(".tmp.hwpx").exists(), "임시 파일을 치웠다")
+    ok(not doc.with_suffix(".tmp.hwpx").exists(), "임시 파일을 치웠다")   # 부재판정-허용: 자가시험 단언이다 — 바로 위 199 가 같은 폴더의 파일을 읽으므로 통째로 못 읽는 상황은 거기서 먼저 시끄럽게 실패한다
     shutil.rmtree(doc.parent)
 
     # ── 6. 아무것도 못 찾으면 알린다 ─────────────────────────────────────
