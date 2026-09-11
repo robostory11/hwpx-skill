@@ -37,7 +37,7 @@ def validate(hwpx_path: str) -> list[str]:
     errors: list[str] = []
     path = Path(hwpx_path)
 
-    if not path.is_file():
+    if not path.is_file():  # 부재판정-허용: 오류 목록으로 돌아가 main 이 INVALID 를 찍고 exit 1 한다 — 조용하지 않다
         return [f"File not found: {hwpx_path}"]
 
     # Check valid ZIP

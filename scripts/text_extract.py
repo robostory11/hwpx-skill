@@ -74,7 +74,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    if not Path(args.input).is_file():
+    if not Path(args.input).is_file():  # 부재판정-허용: 없으면 바로 아래에서 오류를 찍고 exit 1 로 멈춘다
         print(f"Error: File not found: {args.input}", file=sys.stderr)
         sys.exit(1)
 

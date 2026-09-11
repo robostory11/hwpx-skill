@@ -611,7 +611,7 @@ def main():
                         help="네임스페이스 후처리 건너뛰기")
     args = parser.parse_args()
 
-    if not args.input.is_file():
+    if not args.input.is_file():  # 부재판정-허용: 없으면 바로 아래에서 오류를 찍고 exit 1 로 멈춘다
         print(f"ERROR: 입력 파일 없음: {args.input}", file=sys.stderr)
         sys.exit(1)
 
@@ -654,7 +654,7 @@ def main():
     # 5. 네임스페이스 후처리
     if not args.no_fix_ns:
         fix_script = SCRIPT_DIR / "fix_namespaces.py"
-        if fix_script.is_file():
+        if fix_script.is_file():  # 부재판정-허용: 없으면 아래 else 에서 WARNING 을 stderr 로 찍는다 — 조용히 넘어가지 않는다
             ns_result = subprocess.run(
                 [sys.executable, str(fix_script), str(args.output)],
                 capture_output=True, text=True
@@ -668,15 +668,27 @@ def main():
 
     # 6. 검증
     validate_script = SCRIPT_DIR / "validate.py"
-    if validate_script.is_file():
+    if validate_script.is_file():  # 부재판정-허용: 없으면 아래 else 가 WARNING 을 찍는다
         v_result = subprocess.run(
             [sys.executable, str(validate_script), str(args.output)],
             capture_output=True, text=True
         )
         print(v_result.stdout)
+        # ★★ 2026-09-11: 전에는 stdout 만 찍었다. 그런데 `validate.py` 는 오류를 **전부
+        #   stderr 로 보내고 exit 1** 한다 — 그래서 **검증이 정상으로 돌아 INVALID 가 나와도
+        #   화면에는 빈 줄만 찍히고 그대로 「완료」로 끝났다.** 조용한 실패다.
+        if v_result.returncode != 0:
+            print(f"WARNING: 검증이 문제를 찾았습니다 (exit {v_result.returncode}):",
+                  file=sys.stderr)
+            if v_result.stderr.strip():
+                print(v_result.stderr.rstrip(), file=sys.stderr)
+    else:
+        print(f"WARNING: validate.py 없음 — 검증을 건너뜁니다: {validate_script}",
+              file=sys.stderr)
 
     # 7. 텍스트 추출 (요약)
     extract_script = SCRIPT_DIR / "text_extract.py"
+    # 부재판정-허용: 없으면 아래 else 가 WARNING 을 찍는다 (2026-09-11 신설)
     if extract_script.is_file():
         e_result = subprocess.run(
             [sys.executable, str(extract_script), str(args.output)],
@@ -689,6 +701,11 @@ def main():
         # 처음 5줄만 표시
         preview = '\n'.join(lines[:5])
         print(f"미리보기:\n{preview}\n...")
+    else:
+        # ★ 2026-09-11: 이 else 가 없어 조용히 빠졌다. 「문단 수: 0」 은 빈 문서를
+        #   알아차리는 유일한 신호라, 그것이 안 찍히는 것 자체를 알려야 한다.
+        print(f"WARNING: text_extract.py 없음 — 문단 수·미리보기를 건너뜁니다: {extract_script}",
+              file=sys.stderr)
 
     # 정리
     section_path.unlink(missing_ok=True)

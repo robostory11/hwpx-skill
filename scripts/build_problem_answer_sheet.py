@@ -50,6 +50,7 @@ from hwpx_helpers import (  # noqa: E402
 def pack_hwpx(work: Path, output: Path) -> None:
     with ZipFile(output, "w", ZIP_DEFLATED) as zf:
         zf.write(work / "mimetype", "mimetype", compress_type=ZIP_STORED)
+        # 부재판정-허용: work 는 이 프로세스가 방금 임시 폴더에 풀어 놓은 것뿐이다 — 권한 문제가 날 수 없다
         for path in sorted(p for p in work.rglob("*") if p.is_file()):
             rel = path.relative_to(work).as_posix()
             if rel == "mimetype":

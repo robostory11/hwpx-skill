@@ -48,8 +48,8 @@ BASE_DIR = TEMPLATES_DIR / "base"
 # 하드코딩 목록은 government/proposal/gonmun2025 등 신규 템플릿을 누락시켰음.
 AVAILABLE_TEMPLATES = sorted(
     p.name for p in TEMPLATES_DIR.iterdir()
-    if p.is_dir() and p.name != "base"
-) if TEMPLATES_DIR.is_dir() else ["gonmun", "report", "minutes"]
+    if p.is_dir() and p.name != "base"  # 부재판정-허용: 빠지면 --template choices 에서 argparse 가 invalid choice 로 거부한다
+) if TEMPLATES_DIR.is_dir() else ["gonmun", "report", "minutes"]  # 부재판정-허용: 되돌아간 목록으로 빌드해도 174·186 줄이 SystemExit 로 멈춘다 — 문서가 나가지 않는다
 
 
 def validate_xml(filepath: Path) -> None:
@@ -102,13 +102,13 @@ def update_metadata(content_hpf: Path, title: str | None, creator: str | None) -
 def pack_hwpx(input_dir: Path, output_path: Path) -> None:
     """Create HWPX archive with mimetype as first entry (ZIP_STORED)."""
     mimetype_file = input_dir / "mimetype"
-    if not mimetype_file.is_file():
+    if not mimetype_file.is_file():  # 부재판정-허용: 없으면 바로 아래에서 SystemExit 로 멈춘다
         raise SystemExit(f"Missing 'mimetype' in {input_dir}")
 
     all_files = sorted(
         p.relative_to(input_dir).as_posix()
         for p in input_dir.rglob("*")
-        if p.is_file()
+        if p.is_file()  # 부재판정-허용: input_dir 은 이 프로세스가 방금 만든 임시 폴더뿐이다(호출처 한 곳) — 권한 문제가 날 수 없다
     )
 
     with ZipFile(output_path, "w", ZIP_DEFLATED) as zf:
@@ -171,7 +171,7 @@ def build(
 ) -> None:
     """Main build logic."""
 
-    if not BASE_DIR.is_dir():
+    if not BASE_DIR.is_dir():  # 부재판정-허용: 없으면 바로 아래에서 SystemExit 로 멈춘다
         raise SystemExit(f"Base template not found: {BASE_DIR}")
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -183,24 +183,41 @@ def build(
         # 2. Apply template overlay
         if template:
             overlay_dir = TEMPLATES_DIR / template
-            if not overlay_dir.is_dir():
+            if not overlay_dir.is_dir():  # 부재판정-허용: 없으면 바로 아래에서 SystemExit 로 멈춘다
                 raise SystemExit(
                     f"Template '{template}' not found. "
                     f"Available: {', '.join(AVAILABLE_TEMPLATES)}"
                 )
-            for overlay_file in overlay_dir.iterdir():
-                if overlay_file.is_file() and overlay_file.suffix == ".xml":
-                    dest = work / "Contents" / overlay_file.name
-                    shutil.copy2(overlay_file, dest)
+            # ★★ 2026-09-11: 여기 `overlay_file.is_file()` 이 있었다. 못 읽으면 조용히
+            #   `False` 가 되어 **덧씌우기가 통째로 빠진 채** 아래 검증을 전부 통과한다
+            #   (XML 검증은 base 에서 복사된 멀쩡한 파일을 보고, 최종 검증은 존재와 문법만 본다).
+            #   그러고는 화면에 `Template: gonmun` 이 태연히 찍힌다 — **「공문 서식으로
+            #   만들었다」고 말하면서 기본 서식 문서가 기관에 나가는 것이다.** 아무 신호가 없었다.
+            #   → 확장자로만 거르고 **복사를 그대로 시도한다**(폴더면 copy2 가 시끄럽게 죽는다).
+            #   → 그리고 **한 장도 못 덮었으면 멈춘다.** 템플릿 폴더에는 언제나 xml 이 있다
+            #     (실측: gonmun·report·minutes·government·proposal·gonmun2025 전부
+            #      header.xml · section0.xml 둘). **0 은 「덮을 것이 없다」가 아니라 「못 봤다」다.**
+            _overlaid = 0
+            for overlay_file in sorted(overlay_dir.iterdir()):
+                if overlay_file.suffix != ".xml":
+                    continue
+                dest = work / "Contents" / overlay_file.name
+                shutil.copy2(overlay_file, dest)
+                _overlaid += 1
+            if _overlaid == 0:
+                raise SystemExit(
+                    f"Template '{template}' has no .xml to overlay ({overlay_dir}). "
+                    f"Refusing to emit a base-styled document labelled as this template."
+                )
 
         # 3. Apply custom overrides
         if header_override:
-            if not header_override.is_file():
+            if not header_override.is_file():  # 부재판정-허용: 없으면 바로 아래에서 SystemExit 로 멈춘다
                 raise SystemExit(f"Header file not found: {header_override}")
             shutil.copy2(header_override, work / "Contents" / "header.xml")
 
         if section_override:
-            if not section_override.is_file():
+            if not section_override.is_file():  # 부재판정-허용: 없으면 바로 아래에서 SystemExit 로 멈춘다
                 raise SystemExit(f"Section file not found: {section_override}")
             shutil.copy2(section_override, work / "Contents" / "section0.xml")
 
