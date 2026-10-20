@@ -250,22 +250,14 @@ def _check_section(sec, name, body_h, body_w, spacings, charh):
                                       "표 크기를 바꾸는 코드가 그림의 <hp:sz> 를 "
                                       "덮어썼을 수 있다" % (pw, cw),
                         })
-                    # 원본 좌표계 확인: imgClip 이 orgSz 와 다르면 일부만 그린다
-                    org = re.search(r"<hp:orgSz\b[^>]*>", pic)
-                    clip = re.search(r"<hp:imgClip\b[^>]*>", pic)
-                    if org and clip:
-                        ow, oh = attr(org.group(0), "width"), attr(org.group(0), "height")
-                        cr, cbm = attr(clip.group(0), "right"), attr(clip.group(0), "bottom")
-                        if None not in (ow, oh, cr, cbm) and _far(ow, cr, oh, cbm):
-                            out.append({
-                                "rule": "imgclip_not_orgsz",
-                                "severity": "error",
-                                "where": name,
-                                "detail": "imgClip(%s×%s) 이 orgSz(%s×%s) 와 다르다 — "
-                                          "원본의 일부만 그려진다. imgRect·imgClip·imgDim 은 "
-                                          "표시 크기가 아니라 **원본 좌표계**다"
-                                          % (cr, cbm, ow, oh),
-                            })
+                    detail = picture_clip_detail(pic)
+                    if detail:
+                        out.append({
+                            "rule": "imgclip_not_orgsz",
+                            "severity": "error",
+                            "where": name,
+                            "detail": detail,
+                        })
 
     # (4) 줄간격이 좁은 문단에 두 줄 넘는 글이 들어갔는가 — 글자가 겹친다
     if body_w:
@@ -295,6 +287,35 @@ def _check_section(sec, name, body_h, body_w, spacings, charh):
                     "sample": text[:60],
                 })
     return out
+
+
+def picture_clip_detail(pic):
+    """그림의 imgClip 이 원본 좌표계 전체가 아니면(= 일부만 그려지면) 설명을, 아니면 None.
+
+    원본 좌표계는 `<hp:imgDim>` 이다 — 한글이 그림 넣기로 넣은 그림은 imgClip = imgDim = 픽셀×75 이고
+    orgSz 는 표시 크기라 서로 다르다(그래도 온전히 찍힌다). 2026-10-20 한글로 PDF 를 찍어 갈랐다:
+    clip=imgDim≠orgSz → 온전 · clip=imgDim=orgSz(표시 크기) → 온전 · clip=imgDim 의 절반 → 왼쪽 위만 찍힘.
+    전에는 orgSz 와 견줘 한글이 넣은 정상 그림을 전부 「일부만 그려진다」 로 잡았다.
+    imgDim 이 없는 옛 문서만 orgSz 와 견준다.
+    """
+    clip = re.search(r"<hp:imgClip\b[^>]*>", pic)
+    if not clip:
+        return None
+    cr, cbm = attr(clip.group(0), "right"), attr(clip.group(0), "bottom")
+    dim = re.search(r"<hp:imgDim\b[^>]*>", pic)
+    if dim:
+        ref = "imgDim"
+        ow, oh = attr(dim.group(0), "dimwidth"), attr(dim.group(0), "dimheight")
+    else:
+        org = re.search(r"<hp:orgSz\b[^>]*>", pic)
+        if not org:
+            return None
+        ref = "orgSz"
+        ow, oh = attr(org.group(0), "width"), attr(org.group(0), "height")
+    if None in (ow, oh, cr, cbm) or not _far(ow, cr, oh, cbm):
+        return None
+    return ("imgClip(%s×%s) 이 %s(%s×%s) 와 다르다 — 원본의 일부만 그려진다(한글에서 일부러 자른 그림이면 그대로 둔다). "
+            "imgClip 은 표시 크기가 아니라 **원본 좌표계(%s)** 다" % (cr, cbm, ref, ow, oh, ref))
 
 
 def _far(ow, cr, oh, cbm):
