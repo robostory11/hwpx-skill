@@ -132,9 +132,19 @@ _ANNOTATION_RE = re.compile(r"\(([가-힣A-Za-z]+)[:：]\s{1,}\)")
 def fill_in_cell_patterns(cell_text, values, matched_labels):
     """셀 텍스트의 인셀 패턴 교체 — 체크박스/괄호 빈칸/어노테이션.
 
-    Returns: (교체된 텍스트, [{"key","label","value"}]) 또는 None
+    Returns: (교체된 텍스트, [{"key","label","value"}], 단계별 고칠 자리) 또는 None
+    고칠 자리 = 정규식 단계마다 [(start, end, 새 글자)] — 그 단계 입력 글자 기준 좌표다.
+    문서에 반영할 때는 이 자리를 그대로 쓴다(apply_pattern_edits). 전후 글자를 다시 견줘
+    자리를 추정하면 값 안의 공백이 빈칸 공백과 맞물려 값이 run 여럿으로 갈렸다(교차검증 라운드 5).
     """
     matches = []
+    stages = []
+    edits = []
+
+    def edit(m, new):
+        if new != m.group(0):
+            edits.append((m.start(), m.end(), new))
+        return new
 
     def bracket_sub(m):
         prefix, suffix = m.group(1), m.group(2)
@@ -149,7 +159,7 @@ def fill_in_cell_patterns(cell_text, values, matched_labels):
         value = values[key]
         matched_labels.add(key)
         matches.append({"key": key, "label": label, "value": value})
-        return f"{prefix}({value}){suffix}"
+        return edit(m, f"{prefix}({value}){suffix}")
 
     def checkbox_sub(m):
         keyword = m.group(1)
@@ -160,7 +170,7 @@ def fill_in_cell_patterns(cell_text, values, matched_labels):
             return m.group(0)
         matched_labels.add(key)
         matches.append({"key": key, "label": f"□{keyword}", "value": "☑"})
-        return f"☑{keyword}"
+        return edit(m, f"☑{keyword}")
 
     def annotation_sub(m):
         keyword = m.group(1)
@@ -170,12 +180,15 @@ def fill_in_cell_patterns(cell_text, values, matched_labels):
         value = values[key]
         matched_labels.add(key)
         matches.append({"key": key, "label": keyword, "value": value})
-        return f"({keyword}：{value})"
+        return edit(m, f"({keyword}：{value})")
 
-    text = _BRACKET_RE.sub(bracket_sub, cell_text)
-    text = _CHECKBOX_RE.sub(checkbox_sub, text)
-    text = _ANNOTATION_RE.sub(annotation_sub, text)
-    return (text, matches) if matches else None
+    text = cell_text
+    for pattern, sub in ((_BRACKET_RE, bracket_sub), (_CHECKBOX_RE, checkbox_sub),
+                         (_ANNOTATION_RE, annotation_sub)):
+        edits = []
+        text = pattern.sub(sub, text)
+        stages.append(edits)
+    return (text, matches, stages) if matches else None
 
 
 def normalize_values(values):
@@ -348,14 +361,62 @@ def escape_text(s):
 # ─── 텍스트 노드 레지스트리 ────────────────────────────────────────
 
 class TNode:
-    """<hp:t> 요소의 현재 텍스트 상태. 모든 전략이 이 객체를 통해 읽고 쓴다."""
-    __slots__ = ("el", "orig", "text")
+    """<hp:t> 요소의 현재 텍스트 상태. 모든 전략이 이 객체를 통해 읽고 쓴다.
+
+    `text` 는 인라인 요소(<hp:tab/> · <hp:markpenBegin/> · <hp:nbSpace/> …)를 뺀 글자다.
+    뺀 요소는 `tags` 에 (글자 위치, 원문 XML) 로 들고 있다가 쓸 때 제자리에 되돌린다 —
+    전에는 글자만 다시 써서 같은 <hp:t> 안의 탭이 통째로 사라졌다(2026-10-20 RISE 동의서).
+    """
+    __slots__ = ("el", "orig", "_text", "tags", "displaced", "tags_dirty")
 
     def __init__(self, el, xml):
         self.el = el
         raw = xml[el.content_start:el.content_end]
-        self.orig = decode_entities(_INNER_TAG_RE.sub("", raw))
-        self.text = self.orig
+        self.tags = []
+        pieces, off, pos = [], 0, 0
+        for m in _INNER_TAG_RE.finditer(raw):
+            seg = decode_entities(raw[pos:m.start()])
+            pieces.append(seg)
+            off += len(seg)
+            self.tags.append([off, m.group(0)])
+            pos = m.end()
+        pieces.append(decode_entities(raw[pos:]))
+        self.orig = "".join(pieces)
+        self._text = self.orig
+        self.displaced = []
+        self.tags_dirty = False  # 태그를 버리거나 옮겼다 — 글자가 같아도 다시 써야 한다
+
+    @property
+    def text(self):
+        return self._text
+
+    @text.setter
+    def text(self, value):
+        # 「고쳐 쓰기」 — 앞뒤로 같은 글자와 그 사이 요소는 제자리에 남는다(edit_range 하나로 간다)
+        edit_range([self], 0, len(self._text), value)
+
+    def set_content(self, value):
+        """「새 내용으로 갈기」 — 셀 값 채우기 · 행/문단 복제처럼 원래 글자를 통째로 버리는 자리.
+
+        원래 글자와 함께 그 안의 인라인 요소도 버린다(한글에서 범위를 잡고 새로 쓰는 것과 같다).
+        `text =` 로 넣으면 우연히 같은 글자에 탭이 붙어 남는다 — 「1.<tab/>사업 개요」를
+        복제해 「2. 추진 일정」 을 넣으면 「2. 추진 일정<tab/>」 이 된다(교차검증 라운드 1).
+        """
+        self._text = value
+        if self.tags:
+            self.tags_dirty = True
+        self.tags = []
+
+    def render(self):
+        """현재 글자와 인라인 요소를 <hp:t> 내용으로 다시 짠다."""
+        parts, pos = [], 0
+        for off, raw in sorted(self.tags, key=lambda t: t[0]):
+            off = min(off, len(self._text))
+            parts.append(escape_text(self._text[pos:off]))
+            parts.append(raw)
+            pos = off
+        parts.append(escape_text(self._text[pos:]))
+        return "".join(parts)
 
 
 class Registry:
@@ -379,7 +440,9 @@ class Registry:
                 if not under_tbl_within(t, tc)]
 
     def changed(self):
-        return [tn for tn in self._map.values() if tn.text != tn.orig]
+        # 글자만 보면 태그만 버린 노드(탭만 든 <hp:t> 를 "" 로 비운 것)를 다시 쓰지 않는다
+        return [tn for tn in self._map.values()
+                if tn.text != tn.orig or tn.tags_dirty]
 
 
 def extract_cell_text(tc, reg):
@@ -407,9 +470,9 @@ def set_run_text(run, text, reg):
     ts = [reg.get(t) for t in descendants(run, "t")
           if not under_tbl_within(t, run)]
     if ts:
-        ts[0].text = text
+        ts[0].set_content(text)
         for tn in ts[1:]:
-            tn.text = ""
+            tn.set_content("")
         return
     # 한컴오피스가 HWP→HWPX 변환 시 빈 셀 run을 <hp:run charPrIDRef=".."/>로
     # 만들면서 <hp:t>를 생략한다 — 이때는 새 <hp:t>를 삽입해야 한다.
@@ -443,16 +506,16 @@ def replace_cell_text(tc, new_value, reg):
         ts = [reg.get(t) for t in descendants(first_p, "t")
               if not under_tbl_within(t, first_p)]
         if ts:
-            ts[0].text = new_value
+            ts[0].set_content(new_value)
             for tn in ts[1:]:
-                tn.text = ""
+                tn.set_content("")
     for p in paragraphs[1:]:
         for r in descendants(p, ("run", "r")):
             if not under_tbl_within(r, p):
                 set_run_text(r, "", reg)
         for t in descendants(p, "t"):
             if not under_tbl_within(t, p):
-                reg.get(t).text = ""
+                reg.get(t).set_content("")
 
 
 def prepend_cell_text(tc, text, reg):
@@ -464,47 +527,107 @@ def prepend_cell_text(tc, text, reg):
         ts[0].text = f"{text} {ts[0].text}"
 
 
-def with_offsets(tnodes):
-    """현재 텍스트 기준 글로벌 오프셋 계산."""
-    out, off = [], 0
-    for tn in tnodes:
-        out.append((tn, off))
-        off += len(tn.text)
-    return out
+def _common_ends(old, new):
+    """앞뒤로 같은 글자 수 (p, s) — 바뀐 구간만 고치기 위해."""
+    p = 0
+    while p < len(old) and p < len(new) and old[p] == new[p]:
+        p += 1
+    s = 0
+    while (s < len(old) - p and s < len(new) - p
+           and old[len(old) - 1 - s] == new[len(new) - 1 - s]):
+        s += 1
+    return p, s
+
+
+def edit_range(tnodes, g_start, g_end, new_value):
+    """「고쳐 쓰기」 하나뿐인 길 — 여러 <hp:t> 를 이은 글자에서 [g_start, g_end) 를 new_value 로.
+
+    문단(또는 셀)의 <hp:t> 들을 **글자와 인라인 요소가 한 줄로 늘어선 목록**으로 펴서 한 번에
+    고치고 노드로 되돌린다. 노드마다 따로 판단하면 run 경계에서 탭 자리가 조용히 바뀌었다
+    (교차검증 라운드 2·3 — 사장님 결정으로 방식을 바꿨다).
+
+    규칙 — 앞뒤로 같은 글자를 빼고 실제로 바뀐 구간만 본다:
+    - 바뀐 구간 **밖**의 요소는 제자리 그대로.
+    - 바뀐 구간 **안**(첫 바뀐 글자와 끝 바뀐 글자 사이)의 요소는 버리지 않고 새 글자 뒤로 옮기며
+      그 노드의 `displaced` 에 적는다(결과의 inline_warnings).
+    - 순수 덧붙임은 **맞춘 문구에 붙인다** — 문구 뒤쪽에 덧붙이면 앞 글자 바로 뒤(그 자리 요소 앞),
+      문구 맨 앞에 덧붙이면 뒤 글자 바로 앞(그 자리 요소 뒤).
+    - 새 글자는 첫 바뀐 글자(덧붙임이면 붙는 글자)의 노드가 갖는다 — 그 run 의 글자 모양을 따른다.
+    """
+    full = "".join(tn.text for tn in tnodes)
+    old = full[g_start:g_end]
+    p, s = _common_ends(old, new_value)
+    a, b = g_start + p, g_end - s
+    repl = new_value[p:len(new_value) - s]
+    if a == b and not repl:
+        return
+
+    # 한 줄로 편다: ("c", 글자, 노드번호) · ("t", 원문, 노드번호)
+    toks, char_pos = [], []
+    for i, tn in enumerate(tnodes):
+        tags = sorted(tn.tags, key=lambda t: t[0])
+        k = 0
+        for j, ch in enumerate(tn.text):
+            while k < len(tags) and tags[k][0] <= j:
+                toks.append(("t", tags[k][1], i))
+                k += 1
+            char_pos.append(len(toks))
+            toks.append(("c", ch, i))
+        while k < len(tags):
+            toks.append(("t", tags[k][1], i))
+            k += 1
+
+    moved = []
+    if a < b:
+        lo, hi = char_pos[a], char_pos[b - 1] + 1      # 첫·끝 바뀐 글자 사이
+        node = toks[lo][2]
+        moved = [t for t in toks[lo:hi] if t[0] == "t"]
+        toks[lo:hi] = [("c", ch, node) for ch in repl] + moved
+    else:
+        if p > 0 and a > 0:                              # 문구 뒤쪽 — 앞 글자에 붙인다
+            at = char_pos[a - 1] + 1
+            node = toks[at - 1][2]
+        elif a < len(char_pos):                          # 문구 맨 앞 — 뒤 글자에 붙인다
+            at = char_pos[a]
+            node = toks[at][2]
+        else:   # 빈 문구가 문단 끝에 맞았다(인라인 라벨 「성명:<탭>」 의 빈 값) — 끝 요소들 뒤에
+            at = len(toks)
+            node = toks[-1][2] if toks else len(tnodes) - 1
+        toks[at:at] = [("c", ch, node) for ch in repl]
+
+    # 노드로 되돌린다 — 목록에서 노드 번호는 줄지 않는다(새 글자는 붙는 글자의 노드, 옮긴 요소는 제 노드)
+    for i, tn in enumerate(tnodes):
+        text, tags = [], []
+        for kind, val, n in toks:
+            if n != i:
+                continue
+            if kind == "c":
+                text.append(val)
+            else:
+                tags.append([len(text), val])
+        before = sorted(tn.tags, key=lambda t: t[0])
+        if tags != before:
+            tn.tags_dirty = True
+        tn._text = "".join(text)
+        tn.tags = tags
+    for _kind, raw, n in moved:
+        tnodes[n].displaced.append(raw)
 
 
 def replace_text_range(tnodes, g_start, g_end, new_value):
-    """여러 <hp:t>에 걸친 텍스트 범위 교체 — 첫 노드에 새 값, 나머지는 잘라냄."""
-    replaced = False
-    for tn, off in with_offsets(tnodes):
-        node_start, node_end = off, off + len(tn.text)
-        if node_end <= g_start or node_start >= g_end:
-            continue
-        local_start = max(0, g_start - node_start)
-        local_end = min(len(tn.text), g_end - node_start)
-        before, after = tn.text[:local_start], tn.text[local_end:]
-        tn.text = before + (new_value if not replaced else "") + after
-        replaced = True
+    """여러 <hp:t>에 걸친 텍스트 범위 교체 — edit_range 로 간다(이름은 호출자를 위해 남긴다)."""
+    edit_range(tnodes, g_start, g_end, new_value)
 
 
-def apply_text_replacements(tnodes, original_full, replaced_full):
-    """공통 접두/접미를 제외한 변경 구간만 해당 노드에 반영."""
-    if original_full == replaced_full:
-        return
-    if len(tnodes) == 1:
-        tnodes[0].text = replaced_full
-        return
-    diff_start = 0
-    while (diff_start < len(original_full) and diff_start < len(replaced_full)
-           and original_full[diff_start] == replaced_full[diff_start]):
-        diff_start += 1
-    diff_end_orig, diff_end_repl = len(original_full), len(replaced_full)
-    while (diff_end_orig > diff_start and diff_end_repl > diff_start
-           and original_full[diff_end_orig - 1] == replaced_full[diff_end_repl - 1]):
-        diff_end_orig -= 1
-        diff_end_repl -= 1
-    new_part = replaced_full[diff_start:diff_end_repl]
-    replace_text_range(tnodes, diff_start, diff_end_orig, new_part)
+def apply_pattern_edits(tnodes, stages):
+    """셀 패턴(fill_in_cell_patterns)이 정한 자리를 그대로 고친다 — 단계마다, 오른쪽부터 edit_range.
+
+    한 단계 안의 일치는 겹치지 않고 왼쪽부터 늘어서 있으므로 오른쪽부터 고치면 앞 좌표가 안 밀린다.
+    단계가 끝나면 노드 글자가 다음 단계의 입력과 같아진다.
+    """
+    for edits in stages:
+        for start, end, new in reversed(edits):
+            edit_range(tnodes, start, end, new)
 
 
 # ─── 섹션 채우기 (전략 0~3) ────────────────────────────────────────
@@ -531,8 +654,8 @@ def fill_section(xml, values, matched_labels, filled, section_index):
             result = fill_in_cell_patterns(full_text, values, matched_labels)
             if not result:
                 continue
-            new_text, matches = result
-            apply_text_replacements(tnodes, full_text, new_text)
+            new_text, matches, stages = result
+            apply_pattern_edits(tnodes, stages)
             cell_pattern_applied.add(id(tc))
             for m in matches:
                 filled.append({"label": m["label"], "value": m["value"],
@@ -644,6 +767,19 @@ def _nearest(el, name):
     return None
 
 
+# 고친 글자 한가운데 있던 인라인 요소를 옮긴 기록 — CLI 가 결과에 「inline_warnings」 로 싣는다
+INLINE_WARNINGS = []
+
+
+def _with_inline_warnings(report):
+    """결과 JSON 에 inline_warnings 를 싣고 stderr 에도 알린다(종료 코드는 바꾸지 않는다 — 글자는 다 들어갔다)."""
+    if INLINE_WARNINGS:
+        report["inline_warnings"] = list(INLINE_WARNINGS)
+        for w in INLINE_WARNINGS:
+            print(f"[inline_warning] {w}", file=sys.stderr)
+    return report
+
+
 def build_splices(xml, reg):
     """레지스트리의 변경분(텍스트 교체 + 빈 run 삽입)을 splice 목록으로 변환.
 
@@ -652,6 +788,12 @@ def build_splices(xml, reg):
     수정된 문단의 캐시만 제거하므로 나머지 문단의 레이아웃 정보는 보존된다.
     """
     splices = []  # (start, end, replacement)
+    # 경고는 모든 노드에서 모은다 — 요소만 든 노드는 제자리에 있어도(새 글자가 앞 노드로 갔을 뿐) 옮겨진 것이다
+    for tn in list(reg._map.values()):
+        for raw in tn.displaced:
+            INLINE_WARNINGS.append(
+                f"「{tn.text[:30]}」 — 고친 글자 한가운데 있던 {raw[:40]} 를 고친 글자 뒤로 옮겼다(자리 확인)")
+        tn.displaced = []
     for tn in reg.changed():
         el = tn.el
         if el.self_closing:
@@ -663,8 +805,7 @@ def build_splices(xml, reg):
             splices.append((el.start, el.end,
                             f"{opening}{escape_text(tn.text)}</{el.qname}>"))
         else:
-            splices.append((el.content_start, el.content_end,
-                            escape_text(tn.text)))
+            splices.append((el.content_start, el.content_end, tn.render()))
     for run, text in reg.run_insertions:
         prefix = run.qname.split(":")[0] if ":" in run.qname else None
         t_qname = f"{prefix}:t" if prefix else "t"
@@ -712,7 +853,7 @@ def apply_splices(xml, splices):
 
 # ─── 임의 문구 교체 (run 경계를 넘는 텍스트 대응) ──────────────────
 
-def replace_in_section(xml, mapping, counts):
+def replace_in_section(xml, mapping, counts, warnings=None):
     """문단 단위로 연결한 텍스트에서 옛 문구 → 새 문구 교체.
 
     한 문구가 여러 <hp:run>/<hp:t>로 쪼개져 있어도(한컴이 자주 그렇게 저장)
@@ -740,7 +881,10 @@ def replace_in_section(xml, mapping, counts):
                 idx = full.find(old, idx + len(new))
     if not changed:
         return None
+    before = len(INLINE_WARNINGS)
     splices = build_splices(xml, reg)
+    if warnings is not None:
+        warnings.extend(INLINE_WARNINGS[before:])
     return apply_splices(xml, splices) if splices else None
 
 
@@ -934,9 +1078,9 @@ def _clone_para(frag, text, next_pid):
     else:
         ts = [reg.get(t) for t in descendants(p_el, "t")]
         if ts:
-            ts[0].text = text
+            ts[0].set_content(text)
             for tn in ts[1:]:
-                tn.text = ""
+                tn.set_content("")
     splices = build_splices(frag, reg)
     _strip_all_linesegarray(p_el, splices)
     m = re.search(r'\bid="\d+"', frag[p_el.start:p_el.open_end])
@@ -949,6 +1093,7 @@ def _clone_para(frag, text, next_pid):
 
 def add_paras_hwpx(src, dst, specs, section_idx=0):
     """본문 문단 추가 — 기준 문구 뒤에 새 문단 삽입."""
+    del INLINE_WARNINGS[:]
     with open(src, "rb") as f:
         buf = f.read()
     with zipfile.ZipFile(io.BytesIO(buf)) as zf:
@@ -1233,6 +1378,7 @@ def fill_hwpx(src, dst, values=None, cells=None):
     values: {라벨: 값} — 라벨 매칭 전략 0~3
     cells:  [{table, row, col, value, section?}] — 좌표 직접 지정 폴백
     """
+    del INLINE_WARNINGS[:]  # 이번 호출 것만 싣는다(같은 프로세스에서 여러 번 불러도 섞이지 않게)
     with open(src, "rb") as f:
         buf = f.read()
     normalized = normalize_values(values) if values else {}
@@ -1273,6 +1419,7 @@ def fill_hwpx(src, dst, values=None, cells=None):
 
 def replace_hwpx(src, dst, mapping):
     """문구 교체 (run 경계 무관) — clone_form.py Phase 1의 강화판."""
+    del INLINE_WARNINGS[:]
     with open(src, "rb") as f:
         buf = f.read()
     counts = {old: 0 for old in mapping}
@@ -1295,6 +1442,7 @@ def replace_hwpx(src, dst, mapping):
 def add_rows_hwpx(src, dst, table_idx, rows_values, section_idx=0,
                   template_row_idx=-1):
     """표에 행 추가 (기존 행 복제) — 스타일/너비/테두리 보존."""
+    del INLINE_WARNINGS[:]
     with open(src, "rb") as f:
         buf = f.read()
     with zipfile.ZipFile(io.BytesIO(buf)) as zf:
@@ -1703,6 +1851,7 @@ def main():
                 "modified_entries": modified,
                 "ok": bool(filled) and not cell_errors,
             }
+            _with_inline_warnings(report)
             if args.report:
                 with open(args.report, "w", encoding="utf-8") as f:
                     json.dump(report, f, ensure_ascii=False, indent=2)
@@ -1717,10 +1866,11 @@ def main():
                 return 1
             counts, modified = replace_hwpx(args.input, args.output, mapping)
             total = sum(counts.values())
-            _print({"input": args.input, "output": args.output,
-                    "replaced": counts, "total": total,
-                    "not_found": [k for k, v in counts.items() if v == 0],
-                    "modified_entries": modified, "ok": total > 0})
+            out = {"input": args.input, "output": args.output,
+                   "replaced": counts, "total": total,
+                   "not_found": [k for k, v in counts.items() if v == 0],
+                   "modified_entries": modified, "ok": total > 0}
+            _print(_with_inline_warnings(out))
             return 0 if total > 0 else 2
 
         if args.command == "add-row":
@@ -1732,9 +1882,10 @@ def main():
             entry = add_rows_hwpx(args.input, args.output, args.table,
                                   rows_values, args.section,
                                   args.template_row)
-            _print({"input": args.input, "output": args.output,
-                    "table": args.table, "rows_added": len(rows_values),
-                    "modified_entries": [entry], "ok": True})
+            _print(_with_inline_warnings({
+                "input": args.input, "output": args.output,
+                "table": args.table, "rows_added": len(rows_values),
+                "modified_entries": [entry], "ok": True}))
             return 0
 
         if args.command == "add-para":
@@ -1748,9 +1899,10 @@ def main():
                 return 1
             entry = add_paras_hwpx(args.input, args.output, specs,
                                    args.section)
-            _print({"input": args.input, "output": args.output,
-                    "paras_added": len(specs),
-                    "modified_entries": [entry], "ok": True})
+            _print(_with_inline_warnings({
+                "input": args.input, "output": args.output,
+                "paras_added": len(specs),
+                "modified_entries": [entry], "ok": True}))
             return 0
 
         if args.command == "verify":

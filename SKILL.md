@@ -625,6 +625,9 @@ python3 "${CLAUDE_SKILL_DIR}/scripts/fill_hwpx.py" replace doc.hwpx out.hwpx --m
 출력의 `replaced`에 문구별 교체 횟수, `not_found`에 못 찾은 문구가 보고된다.
 `not_found`가 있으면 `analyze` 또는 text_extract.py로 원본 문구를 다시 확인한다.
 
+★ **출력에 `inline_warnings` 가 있으면 그 자리를 PDF 로 찍어 눈으로 본다**(fill·replace·add-row·add-para 공통 · 종료 코드는 0 그대로).
+고친 글자 한가운데 있던 탭·형광펜을 고친 글자 뒤로 옮겼다는 뜻이다. 규칙·경위·알려진 한계: `references/troubleshooting.md` 「탭·형광펜이 사라질 때」.
+
 ### 내용 추가: `add-row` — 표 행 추가 (스타일 100% 보존)
 
 기존 행의 XML을 통째로 복제해 표 끝에 붙이므로 셀 너비·테두리·글꼴이 그대로다.
