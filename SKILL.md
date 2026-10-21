@@ -174,6 +174,10 @@ Rules:
    one `<hp:t>` and rely on visual wrapping.
 5. For table rows with increased cell heights, update every cell in that row and
    keep the table-level `hp:sz/@height` consistent with the row heights.
+6. ★ 양식 표를 채운 뒤에는 **표 전체 셀의 세로정렬을 가운데로** 맞춘다(사장님 「이건 기본이야」 2026-10-21).
+   양식이 위쪽 정렬로 와 있어도 그대로 두지 않는다. 같은 열의 값 칸끼리 가로정렬이 어긋나 있으면 함께 맞춘다.
+   한글로 할 때: `get_into_nth_table(n)` → `TableCellBlockExtendAbs()` → `TableCellBlockExtend()` → `TableVAlignCenter()`.
+   XML 로 할 때: 모든 `hp:subList/@vertAlign` 을 `CENTER` 로.
 
 ---
 
