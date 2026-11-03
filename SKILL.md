@@ -1181,7 +1181,7 @@ subprocess.run(["python3", f"{SKILL_DIR}/scripts/fix_namespaces.py", "output.hwp
 14. **양식 복제 시 Workflow F 필수**: 사용자가 `.hwpx` 양식을 제공하고 내용 변경을 요청하면 `clone_form.py` 사용. 절대로 `<hp:t>` 노드를 순차 덮어쓰기하거나 lxml로 텍스트를 직접 조작하지 말 것 (런 소실·서식 파괴 원인)
 15. **서브에이전트 검수 권장**: 문서 생성 후 별도 서브에이전트로 `validate.py` + `text_extract.py` + 구조 비교를 실행하여 품질 검증
 16. **Remove line caches after edits**: run `finalize_hwpx.py --strip-linesegarray` after XML/text replacement.
-17. **Check strict table layout**: run `finalize_hwpx.py --layout` and fix long single-paragraph cells by splitting paragraphs and increasing row heights.
+17. **Check strict table layout**: run `finalize_hwpx.py --layout` and fix long single-paragraph cells by splitting paragraphs and increasing row heights. **Exception: when the owner gave someone else's document as a template ("참고해서 내 내용으로"), do not change the form (tables, row heights, fonts, page setup). Change only the text, and shorten the text if it overflows.**
 18. **Real openability check**: on Windows with Hancom installed, run `validate.py --hancom`; ZIP/XML validation alone is not enough.
 19. **변환 후 글자 테두리 보정**: `.hwp` 변환 시 `convert_hwp.py`가 글자 테두리 버그를 자동 제거. 이미 변환된 파일은 `fill_hwpx.py fix-borders`로 보정
 20. **표를 만들었으면 `hancom_style.py all`**: `md2hwpx`·`build_hwpx`가 만든 표는 셀 여백이
