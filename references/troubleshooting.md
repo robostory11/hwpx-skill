@@ -173,7 +173,8 @@ template-aware review.
 **고치는 법**
 
 ```
-taskkill /F /IM Hwp.exe
+Get-Process Hwp -ErrorAction SilentlyContinue | Select-Object Id,MainWindowTitle,StartTime
+Stop-Process -Id <내 자동화가 띄운 PID>   # 창 제목이 있는 한글은 사장님 창일 수 있다 — 끄지 말고 저장을 부탁드린다
 python -c "from pyhwpx import Hwp; Hwp.register_regedit()"
 reg query "HKCU\Software\HNC\HwpAutomation\Modules" /v FilePathCheckerModule
 ```
@@ -186,7 +187,7 @@ reg query "HKCU\Software\HNC\HwpAutomation\Modules" /v FilePathCheckerModule
   이다. `""` 로도 돌던 실측이 있어 단독 원인으로 단정하지는 않았지만, 실제로 돌던 쪽에
   맞추는 편이 안전하다.
 - *"다른 한글 인스턴스가 떠 있으면 `PageCount` 가 1로 나오는 등 엉뚱한 값이 온다"* —
-  재기 전에 `taskkill /F /IM Hwp.exe` 를 먼저 한다.
+  재기 전에 `Get-Process Hwp` 로 떠 있는 한글을 보고, 내 자동화가 띄운 것만 PID 로 끈다. 사장님 창이 떠 있으면 저장을 부탁드린 뒤 잰다.
 
 **★★ 재저장 뒤에는 내용이 남았는지 센다.** paperwork 메모리에 *"보안 모듈 미등록 환경에서
 문서 일부만 로드해 내용이 잘린다(표 20개 중 5개만 저장)"* 는 사고 기록이 있다.

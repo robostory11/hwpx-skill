@@ -142,9 +142,10 @@ python3 "${CLAUDE_SKILL_DIR}/scripts/fill_hwpx.py" check output.hwpx --strict   
 **1.4MB 짜리도 똑같이 멈췄다.** 작은 파일 하나로 30초면 가른다:
 
 - **작은 파일도 멈춘다** → 환경 문제다. **거의 언제나 보안 모듈 등록이 죽은 경로를
-  가리키는 것**이다(2026-09-02 실측). 아래 한 줄로 고친다:
+  가리키는 것**이다(2026-09-02 실측). 아래대로 고친다:
   ```
-  taskkill /F /IM Hwp.exe
+  Get-Process Hwp -ErrorAction SilentlyContinue | Select-Object Id,MainWindowTitle,StartTime
+  Stop-Process -Id <내 자동화가 띄운 PID>   # 창 제목이 있는 한글은 사장님 창일 수 있다 — 끄지 말고 저장을 부탁드린다
   python -c "from pyhwpx import Hwp; Hwp.register_regedit()"
   ```
   ★ `RegisterModule` 이 「성공」이라 답해도 **DLL 이 붙었다는 뜻이 아니다** — 레지스트리에
